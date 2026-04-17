@@ -1,22 +1,20 @@
 import os
+import time
+import hmac
+import hashlib
+import requests
 import pandas as pd
 import ta
-import requests
 from google import genai
-from binance.client import Client
 
-# ดึงค่าจาก Secrets
+# ⚙️ 1. ดึงค่าจาก Secrets
 B_KEY      = os.getenv('BINANCE_KEY')
 B_SECRET   = os.getenv('BINANCE_SECRET')
 G_KEY      = os.getenv('GEMINI_KEY')
 LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
-client = Client(B_KEY, B_SECRET)
-client.API_URL = 'https://api.binance.th/api'
-client.PRIVATE_API_URL = 'https://api.binance.th/api'
-
-ai_client = genai.Client(api_key=G_KEY)
+BASE_URL = 'https://api.binance.th'
 
 def send_line(msg):
     url = 'https://api.line.me/v2/bot/message/push'
@@ -24,26 +22,40 @@ def send_line(msg):
     data = {"to": USER_ID, "messages": [{"type": "text", "text": msg}]}
     requests.post(url, json=data, headers=headers)
 
+# ฟังก์ชันสำหรับเซ็นชื่อกำกับคำสั่ง (Signature) ตามกฎของ Binance
+def get_binance_balance():
+    endpoint = '/api/v3/account'
+    query_string = f"timestamp={int(time.time() * 1000)}"
+    signature = hmac.new(B_SECRET.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+    url = f"{BASE_URL}{endpoint}?{query_string}&signature={signature}"
+    headers = {'X-MBX-APIKEY': B_KEY}
+    res = requests.get(url, headers=headers)
+    return res.json()
+
 def run_check():
-    # 1. ส่งแจ้งเตือนทันทีที่เริ่ม (เพื่อให้รู้ว่าบอทไม่ตาย)
-    send_line("🔍 บอทเริ่มตรวจสอบตลาดประจำชั่วโมง...")
+    # แจ้งเตือนในไลน์ให้รู้ว่าบอท "ตื่นแล้ว"
+    send_line("🤖 บอท GitHub กำลังเริ่มตรวจสอบตลาด...")
     
     try:
-        balance = client.get_asset_balance(asset='THB')
-        cash = float(balance['free'])
-        print(f"เชื่อมต่อสำเร็จ! เงินสด: {cash} THB")
-
-        # ... (ส่วนเช็คสัญญาณซื้อขายเดิม) ...
-        # (ถ้าไม่มีสัญญาณซื้อขาย บอทจะจบการทำงานตรงนี้)
+        # ลองดึงข้อมูลยอดเงิน (ถ้าผ่านจุดนี้ได้คือรอด!)
+        account_info = get_binance_balance()
+        
+        # เช็คว่าโดนบล็อก IP ไหม
+        if 'code' in account_info and account_info['code'] == 0:
+             print("Success connection!")
+        
+        # ดึงราคา BTC เพื่อทดสอบ
+        price_res = requests.get(f"{BASE_URL}/api/v3/ticker/price?symbol=BTCTHB")
+        price = price_res.json()['price']
+        
+        send_line(f"✅ เชื่อมต่อสำเร็จ!\nราคา BTC ตอนนี้: {float(price):,.0f} บาท")
 
     except Exception as e:
         error_msg = str(e)
-        print(f"Error: {error_msg}")
-        # ถ้าโดนบล็อก IP ให้ส่งแจ้งเตือนบอกในไลน์ด้วย
-        if "restricted location" in error_msg.lower():
-            send_line("❌ GitHub IP โดนบล็อก (Restricted Location) ค่อยมาแก้พรุ่งนี้ครับ")
+        if "Service unavailable" in error_msg or "restricted" in error_msg:
+            send_line("❌ GitHub ยังคงโดนบล็อก IP (Restricted Location)")
         else:
-            send_line(f"⚠️ เกิดข้อผิดพลาด: {error_msg[:50]}")
+            send_line(f"⚠️ Error: {error_msg[:50]}")
 
 if __name__ == "__main__":
     run_check()
