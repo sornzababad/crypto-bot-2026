@@ -1,0 +1,31 @@
+name: Crypto-Bot-Hourly
+
+on:
+  schedule:
+    - cron: '0 * * * *' # สั่งให้ตื่นมาทำงานทุกต้นชั่วโมง (เช่น 10:00, 11:00)
+  workflow_dispatch:     # เพิ่มปุ่มให้เรากดสั่งรันเองได้เพื่อทดสอบ
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install python-binance pandas ta requests google-genai
+
+      - name: Run bot logic
+        env:
+          BINANCE_KEY: ${{ secrets.BINANCE_KEY }}
+          BINANCE_SECRET: ${{ secrets.BINANCE_SECRET }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py
