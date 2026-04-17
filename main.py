@@ -5,21 +5,16 @@ import requests
 from google import genai
 from binance.client import Client
 
-# ⚙️ Configuration
+# ดึงค่าจาก Secrets
 B_KEY      = os.getenv('BINANCE_KEY')
 B_SECRET   = os.getenv('BINANCE_SECRET')
 G_KEY      = os.getenv('GEMINI_KEY')
 LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
-# 🔌 พยายามเชื่อมต่อแบบ bypass การ ping เบื้องต้น
-try:
-    client = Client(B_KEY, B_SECRET)
-    # บังคับ URL เป็นของไทย
-    client.API_URL = 'https://api.binance.th/api'
-    client.PRIVATE_API_URL = 'https://api.binance.th/api'
-except Exception as e:
-    print(f"Connection Init Error: {e}")
+client = Client(B_KEY, B_SECRET)
+client.API_URL = 'https://api.binance.th/api'
+client.PRIVATE_API_URL = 'https://api.binance.th/api'
 
 ai_client = genai.Client(api_key=G_KEY)
 
@@ -30,19 +25,25 @@ def send_line(msg):
     requests.post(url, json=data, headers=headers)
 
 def run_check():
+    # 1. ส่งแจ้งเตือนทันทีที่เริ่ม (เพื่อให้รู้ว่าบอทไม่ตาย)
+    send_line("🔍 บอทเริ่มตรวจสอบตลาดประจำชั่วโมง...")
+    
     try:
-        # ลองดึงราคาดู ถ้าผ่านตรงนี้ได้แสดงว่า IP ไม่โดนบล็อก
-        sym = 'BTCTHB'
-        bars = client.get_historical_klines(sym, Client.KLINE_INTERVAL_1HOUR, "1 day ago UTC")
-        print("Successfully connected to Binance TH!")
-        
-        # ... (ใส่ Logic การเทรดเดิมต่อจากตรงนี้) ...
-        # (เพื่อความกระชับ ผมจะข้ามส่วน Logic ที่เหลือไปนะครับ)
-        
+        balance = client.get_asset_balance(asset='THB')
+        cash = float(balance['free'])
+        print(f"เชื่อมต่อสำเร็จ! เงินสด: {cash} THB")
+
+        # ... (ส่วนเช็คสัญญาณซื้อขายเดิม) ...
+        # (ถ้าไม่มีสัญญาณซื้อขาย บอทจะจบการทำงานตรงนี้)
+
     except Exception as e:
-        print(f"Critical Error: {e}")
-        if "restricted location" in str(e).lower():
-            print("❌ ยืนยัน: GitHub IP ถูก Binance บล็อกพื้นที่ครับ")
+        error_msg = str(e)
+        print(f"Error: {error_msg}")
+        # ถ้าโดนบล็อก IP ให้ส่งแจ้งเตือนบอกในไลน์ด้วย
+        if "restricted location" in error_msg.lower():
+            send_line("❌ GitHub IP โดนบล็อก (Restricted Location) ค่อยมาแก้พรุ่งนี้ครับ")
+        else:
+            send_line(f"⚠️ เกิดข้อผิดพลาด: {error_msg[:50]}")
 
 if __name__ == "__main__":
     run_check()
