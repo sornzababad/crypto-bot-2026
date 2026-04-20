@@ -23,9 +23,6 @@ jobs:
 
       - name: Run bot logic
         env:
-          BINANCE_KEY: ${{ secrets.BINANCE_KEY }}
-          BINANCE_SECRET: ${{ secrets.BINANCE_SECRET }}
-          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py
