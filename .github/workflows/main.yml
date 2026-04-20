@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install python-binance pandas ta requests google-genai
+          pip install requests
 
       - name: Run bot logic
         env:
