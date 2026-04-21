@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from datetime import datetime, timezone, timedelta
 
@@ -6,15 +7,24 @@ LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
 COINS = [
-    {'id': 'bitcoin',     'symbol': 'BTC',  'emoji': '₿'},
-    {'id': 'ethereum',    'symbol': 'ETH',  'emoji': 'Ξ'},
-    {'id': 'binancecoin', 'symbol': 'BNB',  'emoji': '◆'},
-    {'id': 'solana',      'symbol': 'SOL',  'emoji': '◎'},
-    {'id': 'ripple',      'symbol': 'XRP',  'emoji': '✕'},
-    {'id': 'dogecoin',    'symbol': 'DOGE', 'emoji': 'Ð'},
-    {'id': 'cardano',     'symbol': 'ADA',  'emoji': '₳'},
-    {'id': 'avalanche-2', 'symbol': 'AVAX', 'emoji': '△'},
+    {'id': 'bitcoin',       'symbol': 'BTC',  'emoji': '₿'},
+    {'id': 'ethereum',      'symbol': 'ETH',  'emoji': 'Ξ'},
+    {'id': 'binancecoin',   'symbol': 'BNB',  'emoji': '◆'},
+    {'id': 'solana',        'symbol': 'SOL',  'emoji': '◎'},
+    {'id': 'ripple',        'symbol': 'XRP',  'emoji': '✕'},
+    {'id': 'dogecoin',      'symbol': 'DOGE', 'emoji': 'Ð'},
+    {'id': 'cardano',       'symbol': 'ADA',  'emoji': '₳'},
+    {'id': 'avalanche-2',   'symbol': 'AVAX', 'emoji': '△'},
+    {'id': 'the-open-network', 'symbol': 'TON',  'emoji': '◈'},
+    {'id': 'tron',          'symbol': 'TRX',  'emoji': '◉'},
+    {'id': 'chainlink',     'symbol': 'LINK', 'emoji': '⬡'},
+    {'id': 'polkadot',      'symbol': 'DOT',  'emoji': '●'},
+    {'id': 'matic-network', 'symbol': 'POL',  'emoji': '⬟'},
+    {'id': 'litecoin',      'symbol': 'LTC',  'emoji': 'Ł'},
+    {'id': 'near',          'symbol': 'NEAR', 'emoji': '◇'},
 ]
+
+CHUNK_SIZE = 5   # coins per bubble in the carousel
 
 
 # ─── Data fetching ────────────────────────────────────────────────────────────
@@ -32,7 +42,6 @@ def get_market_data() -> list:
 
 
 def get_hourly_prices(coin_id: str) -> list:
-    # days=3 → hourly granularity, ~72 data points (enough for RSI-14 + EMA-26)
     url = (
         f'https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart'
         '?vs_currency=thb&days=3'
@@ -46,7 +55,7 @@ def get_hourly_prices(coin_id: str) -> list:
 
 def calc_ema(prices: list, period: int) -> float:
     k = 2 / (period + 1)
-    ema = sum(prices[:period]) / period          # seed with SMA
+    ema = sum(prices[:period]) / period
     for p in prices[period:]:
         ema = p * k + ema * (1 - k)
     return ema
@@ -69,30 +78,32 @@ def calc_rsi(prices: list, period: int = 14) -> float:
 
 
 def get_signal(prices: list) -> dict:
-    rsi    = calc_rsi(prices)
-    ema12  = calc_ema(prices, 12)
-    ema26  = calc_ema(prices, 26)
-    up     = ema12 > ema26
+    rsi   = calc_rsi(prices)
+    ema12 = calc_ema(prices, 12)
+    ema26 = calc_ema(prices, 26)
+    up    = ema12 > ema26
 
     if rsi <= 30:
-        return {'text': '🟢 ซื้อได้เลย!',  'detail': f'RSI {rsi:.0f} — Oversold มาก',        'color': '#27ae60'}
+        return {'text': '🟢 ซื้อได้เลย!', 'detail': f'RSI {rsi:.0f} — Oversold มาก',      'color': '#27ae60'}
     if rsi <= 42 and up:
-        return {'text': '🟢 น่าซื้อ',       'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',        'color': '#2ecc71'}
+        return {'text': '🟢 น่าซื้อ',      'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',      'color': '#2ecc71'}
     if rsi >= 70:
-        return {'text': '🔴 ขายได้เลย!',   'detail': f'RSI {rsi:.0f} — Overbought มาก',        'color': '#c0392b'}
+        return {'text': '🔴 ขายได้เลย!',  'detail': f'RSI {rsi:.0f} — Overbought มาก',      'color': '#c0392b'}
     if rsi >= 58 and not up:
-        return {'text': '🔴 น่าขาย',        'detail': f'RSI {rsi:.0f} — EMA กำลังลง',          'color': '#e74c3c'}
-    return     {'text': '🟡 รอดูก่อน',     'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด',   'color': '#f39c12'}
+        return {'text': '🔴 น่าขาย',       'detail': f'RSI {rsi:.0f} — EMA กำลังลง',         'color': '#e74c3c'}
+    return     {'text': '🟡 รอดูก่อน',    'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด',  'color': '#f39c12'}
 
 
-# ─── Flex message builder ─────────────────────────────────────────────────────
+# ─── Flex builder ─────────────────────────────────────────────────────────────
 
 def format_price(price: float) -> str:
     if price >= 10_000:
         return f"{price:,.0f} ฿"
     elif price >= 1:
         return f"{price:,.2f} ฿"
-    return f"{price:.6f} ฿"
+    elif price >= 0.0001:
+        return f"{price:.6f} ฿"
+    return f"{price:.8f} ฿"
 
 
 def coin_section(market: dict, meta: dict, signal: dict) -> list:
@@ -100,13 +111,9 @@ def coin_section(market: dict, meta: dict, signal: dict) -> list:
     change_pct = market.get('price_change_percentage_24h') or 0.0
     high       = market.get('high_24h') or price
     low        = market.get('low_24h') or price
-
-    is_up        = change_pct >= 0
-    change_color = '#2ecc71' if is_up else '#e74c3c'
-    arrow        = '▲' if is_up else '▼'
+    is_up      = change_pct >= 0
 
     return [
-        # coin name + price + 24h change
         {
             "type": "box",
             "layout": "horizontal",
@@ -123,163 +130,118 @@ def coin_section(market: dict, meta: dict, signal: dict) -> list:
                 {
                     "type": "text",
                     "text": format_price(price),
-                    "size": "md",
+                    "size": "sm",
                     "color": "#ffffff",
                     "align": "end",
                     "flex": 4
                 },
                 {
                     "type": "text",
-                    "text": f"{arrow} {abs(change_pct):.2f}%",
+                    "text": f"{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
                     "size": "sm",
-                    "color": change_color,
+                    "color": '#2ecc71' if is_up else '#e74c3c',
                     "align": "end",
                     "weight": "bold",
                     "flex": 3
                 }
             ]
         },
-        # high / low
         {
             "type": "box",
             "layout": "horizontal",
             "margin": "sm",
             "contents": [
-                {
-                    "type": "text",
-                    "text": f"H: {format_price(high)}",
-                    "size": "xxs",
-                    "color": "#888899",
-                    "flex": 1
-                },
-                {
-                    "type": "text",
-                    "text": f"L: {format_price(low)}",
-                    "size": "xxs",
-                    "color": "#888899",
-                    "align": "end",
-                    "flex": 1
-                }
+                {"type": "text", "text": f"H: {format_price(high)}", "size": "xxs", "color": "#888899", "flex": 1},
+                {"type": "text", "text": f"L: {format_price(low)}",  "size": "xxs", "color": "#888899", "align": "end", "flex": 1}
             ]
         },
-        # signal badge
         {
             "type": "box",
             "layout": "horizontal",
             "margin": "sm",
-            "paddingAll": "6px",
+            "paddingAll": "5px",
             "backgroundColor": "#1e1e3a",
             "cornerRadius": "6px",
             "contents": [
-                {
-                    "type": "text",
-                    "text": signal['text'],
-                    "size": "sm",
-                    "weight": "bold",
-                    "color": signal['color'],
-                    "flex": 0
-                },
-                {
-                    "type": "text",
-                    "text": signal['detail'],
-                    "size": "xxs",
-                    "color": "#888899",
-                    "align": "end",
-                    "flex": 1,
-                    "gravity": "center"
-                }
+                {"type": "text", "text": signal['text'],   "size": "sm",  "weight": "bold", "color": signal['color'], "flex": 0},
+                {"type": "text", "text": signal['detail'], "size": "xxs", "color": "#888899", "align": "end", "flex": 1, "gravity": "center"}
             ]
         },
-        # bottom padding
-        {
-            "type": "box",
-            "layout": "vertical",
-            "height": "8px",
-            "contents": []
-        }
+        {"type": "box", "layout": "vertical", "height": "8px", "contents": []}
     ]
 
 
-def build_flex(markets: list, signals: dict) -> dict:
-    bkk      = datetime.now(timezone(timedelta(hours=7)))
-    time_str = bkk.strftime('%H:%M น.  %d/%m/%Y')
-
-    meta_by_id = {c['id']: c for c in COINS}
+def make_bubble(chunk: list, markets_by_id: dict, signals: dict,
+                time_str: str, page: int, total_pages: int) -> dict:
     body_contents = []
-
-    for i, market in enumerate(markets):
-        meta   = meta_by_id.get(market['id'], {'symbol': market['symbol'].upper(), 'emoji': '●'})
-        signal = signals.get(market['id'], {'text': '🟡 รอดูก่อน', 'detail': 'ไม่มีข้อมูล', 'color': '#f39c12'})
+    for i, meta in enumerate(chunk):
+        market = markets_by_id.get(meta['id'])
+        if not market:
+            continue
+        signal = signals.get(meta['id'], {'text': '🟡 รอดูก่อน', 'detail': 'ไม่มีข้อมูล', 'color': '#f39c12'})
         body_contents.extend(coin_section(market, meta, signal))
-        if i < len(markets) - 1:
+        if i < len(chunk) - 1:
             body_contents.append({"type": "separator", "color": "#2a2a4a", "margin": "none"})
 
     return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#12122a",
+            "paddingAll": "14px",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {"type": "text", "text": "📊 Crypto Alert", "weight": "bold", "color": "#ffffff", "size": "lg", "flex": 1},
+                        {"type": "text", "text": f"{page}/{total_pages}", "size": "xs", "color": "#8888aa", "align": "end", "gravity": "bottom", "flex": 0}
+                    ]
+                },
+                {"type": "text", "text": f"อัปเดต: {time_str}", "color": "#8888aa", "size": "xxs", "margin": "sm"}
+            ]
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#0d0d1f",
+            "paddingAll": "14px",
+            "contents": body_contents
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#12122a",
+            "paddingAll": "8px",
+            "contents": [
+                {"type": "text", "text": "RSI-14 + EMA-12/26  ·  ใช้ประกอบการตัดสินใจเท่านั้น",
+                 "color": "#555577", "size": "xxs", "align": "center"}
+            ]
+        }
+    }
+
+
+def build_carousel(markets: list, signals: dict) -> dict:
+    bkk      = datetime.now(timezone(timedelta(hours=7)))
+    time_str = bkk.strftime('%H:%M น. %d/%m/%Y')
+
+    markets_by_id = {m['id']: m for m in markets}
+
+    chunks      = [COINS[i:i + CHUNK_SIZE] for i in range(0, len(COINS), CHUNK_SIZE)]
+    total_pages = len(chunks)
+    bubbles     = [
+        make_bubble(chunk, markets_by_id, signals, time_str, i + 1, total_pages)
+        for i, chunk in enumerate(chunks)
+    ]
+
+    return {
         "type": "flex",
-        "altText": f"📊 Crypto Alert — {time_str}",
+        "altText": f"📊 Crypto Alert {len(COINS)} เหรียญ — {time_str}",
         "contents": {
-            "type": "bubble",
-            "size": "mega",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#12122a",
-                "paddingAll": "16px",
-                "contents": [
-                    {
-                        "type": "box",
-                        "layout": "horizontal",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": "📊 Crypto Alert",
-                                "weight": "bold",
-                                "color": "#ffffff",
-                                "size": "xl",
-                                "flex": 1
-                            },
-                            {
-                                "type": "text",
-                                "text": "Day Trade",
-                                "size": "xs",
-                                "color": "#8888aa",
-                                "align": "end",
-                                "gravity": "bottom",
-                                "flex": 0
-                            }
-                        ]
-                    },
-                    {
-                        "type": "text",
-                        "text": f"อัปเดตล่าสุด: {time_str}",
-                        "color": "#8888aa",
-                        "size": "xs",
-                        "margin": "sm"
-                    }
-                ]
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#0d0d1f",
-                "paddingAll": "14px",
-                "contents": body_contents
-            },
-            "footer": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#12122a",
-                "paddingAll": "10px",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": "สัญญาณจาก RSI-14 + EMA-12/26  ·  ใช้ประกอบการตัดสินใจเท่านั้น",
-                        "color": "#555577",
-                        "size": "xxs",
-                        "align": "center"
-                    }
-                ]
-            }
+            "type": "carousel",
+            "contents": bubbles
         }
     }
 
@@ -317,8 +279,9 @@ def run_check():
                 signals[coin['id']] = get_signal(prices)
             except Exception:
                 signals[coin['id']] = {'text': '🟡 รอดูก่อน', 'detail': 'ดึงข้อมูลไม่ได้', 'color': '#f39c12'}
+            time.sleep(0.5)   # avoid CoinGecko rate limit
 
-        send_flex(build_flex(markets, signals))
+        send_flex(build_carousel(markets, signals))
 
     except Exception as e:
         send_text(f"⚠️ Error: {str(e)[:100]}")
