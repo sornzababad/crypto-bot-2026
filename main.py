@@ -1,5 +1,6 @@
 import os
 import time
+import traceback
 import requests
 from datetime import datetime, timezone, timedelta
 
@@ -7,24 +8,33 @@ LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
 COINS = [
-    {'id': 'bitcoin',       'symbol': 'BTC',  'emoji': '₿'},
-    {'id': 'ethereum',      'symbol': 'ETH',  'emoji': 'Ξ'},
-    {'id': 'binancecoin',   'symbol': 'BNB',  'emoji': '◆'},
-    {'id': 'solana',        'symbol': 'SOL',  'emoji': '◎'},
-    {'id': 'ripple',        'symbol': 'XRP',  'emoji': '✕'},
-    {'id': 'dogecoin',      'symbol': 'DOGE', 'emoji': 'Ð'},
-    {'id': 'cardano',       'symbol': 'ADA',  'emoji': '₳'},
-    {'id': 'avalanche-2',   'symbol': 'AVAX', 'emoji': '△'},
+    {'id': 'bitcoin',          'symbol': 'BTC',  'emoji': '₿'},
+    {'id': 'ethereum',         'symbol': 'ETH',  'emoji': 'Ξ'},
+    {'id': 'binancecoin',      'symbol': 'BNB',  'emoji': '◆'},
+    {'id': 'solana',           'symbol': 'SOL',  'emoji': '◎'},
+    {'id': 'ripple',           'symbol': 'XRP',  'emoji': '✕'},
+    {'id': 'dogecoin',         'symbol': 'DOGE', 'emoji': 'Ð'},
+    {'id': 'cardano',          'symbol': 'ADA',  'emoji': '₳'},
+    {'id': 'avalanche-2',      'symbol': 'AVAX', 'emoji': '△'},
     {'id': 'the-open-network', 'symbol': 'TON',  'emoji': '◈'},
-    {'id': 'tron',          'symbol': 'TRX',  'emoji': '◉'},
-    {'id': 'chainlink',     'symbol': 'LINK', 'emoji': '⬡'},
-    {'id': 'polkadot',      'symbol': 'DOT',  'emoji': '●'},
-    {'id': 'matic-network', 'symbol': 'POL',  'emoji': '⬟'},
-    {'id': 'litecoin',      'symbol': 'LTC',  'emoji': 'Ł'},
-    {'id': 'near',          'symbol': 'NEAR', 'emoji': '◇'},
+    {'id': 'tron',             'symbol': 'TRX',  'emoji': '◉'},
+    {'id': 'chainlink',        'symbol': 'LINK', 'emoji': '⬡'},
+    {'id': 'polkadot',         'symbol': 'DOT',  'emoji': '●'},
+    {'id': 'matic-network',    'symbol': 'POL',  'emoji': '⬟'},
+    {'id': 'litecoin',         'symbol': 'LTC',  'emoji': 'Ł'},
+    {'id': 'near',             'symbol': 'NEAR', 'emoji': '◇'},
 ]
 
-CHUNK_SIZE = 5   # coins per bubble in the carousel
+CHUNK_SIZE = 5
+
+
+def safe_float(val, default: float = 0.0) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
 
 
 # ─── Data fetching ────────────────────────────────────────────────────────────
@@ -38,7 +48,8 @@ def get_market_data() -> list:
     )
     res = requests.get(url, timeout=15)
     res.raise_for_status()
-    return res.json()
+    data = res.json()
+    return data if isinstance(data, list) else []
 
 
 def get_hourly_prices(coin_id: str) -> list:
@@ -48,14 +59,17 @@ def get_hourly_prices(coin_id: str) -> list:
     )
     res = requests.get(url, timeout=15)
     res.raise_for_status()
-    return [p[1] for p in res.json()['prices'] if p[1] is not None]
+    raw = res.json()
+    return [float(p[1]) for p in raw.get('prices', []) if p[1] is not None]
 
 
 # ─── Indicators ──────────────────────────────────────────────────────────────
 
 def calc_ema(prices: list, period: int) -> float:
+    if not prices:
+        return 0.0
     if len(prices) < period:
-        return prices[-1] if prices else 0.0
+        return prices[-1]
     k = 2 / (period + 1)
     ema = sum(prices[:period]) / period
     for p in prices[period:]:
@@ -67,8 +81,8 @@ def calc_rsi(prices: list, period: int = 14) -> float:
     if len(prices) < period + 1:
         return 50.0
     changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-    gains   = [max(c, 0) for c in changes]
-    losses  = [abs(min(c, 0)) for c in changes]
+    gains  = [max(c, 0.0) for c in changes]
+    losses = [abs(min(c, 0.0)) for c in changes]
     ag = sum(gains[:period])  / period
     al = sum(losses[:period]) / period
     for i in range(period, len(changes)):
@@ -76,7 +90,7 @@ def calc_rsi(prices: list, period: int = 14) -> float:
         al = (al * (period - 1) + losses[i]) / period
     if al == 0:
         return 100.0
-    return 100 - (100 / (1 + ag / al))
+    return 100.0 - (100.0 / (1.0 + ag / al))
 
 
 def get_signal(prices: list) -> dict:
@@ -86,37 +100,35 @@ def get_signal(prices: list) -> dict:
     up    = ema12 > ema26
 
     if rsi <= 30:
-        return {'text': '🟢 ซื้อได้เลย!', 'detail': f'RSI {rsi:.0f} — Oversold มาก',      'color': '#27ae60'}
+        return {'text': '🟢 ซื้อได้เลย!', 'detail': f'RSI {rsi:.0f} — Oversold มาก',     'color': '#27ae60'}
     if rsi <= 42 and up:
-        return {'text': '🟢 น่าซื้อ',      'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',      'color': '#2ecc71'}
+        return {'text': '🟢 น่าซื้อ',      'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',     'color': '#2ecc71'}
     if rsi >= 70:
-        return {'text': '🔴 ขายได้เลย!',  'detail': f'RSI {rsi:.0f} — Overbought มาก',      'color': '#c0392b'}
+        return {'text': '🔴 ขายได้เลย!',  'detail': f'RSI {rsi:.0f} — Overbought มาก',     'color': '#c0392b'}
     if rsi >= 58 and not up:
-        return {'text': '🔴 น่าขาย',       'detail': f'RSI {rsi:.0f} — EMA กำลังลง',         'color': '#e74c3c'}
-    return     {'text': '🟡 รอดูก่อน',    'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด',  'color': '#f39c12'}
+        return {'text': '🔴 น่าขาย',       'detail': f'RSI {rsi:.0f} — EMA กำลังลง',        'color': '#e74c3c'}
+    return     {'text': '🟡 รอดูก่อน',    'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด', 'color': '#f39c12'}
 
 
 # ─── Flex builder ─────────────────────────────────────────────────────────────
 
-def format_price(price) -> str:
-    if price is None:
-        return "N/A"
-    price = float(price)
+def format_price(val) -> str:
+    price = safe_float(val)
     if price >= 10_000:
         return f"{price:,.0f} ฿"
-    elif price >= 1:
+    if price >= 1:
         return f"{price:,.2f} ฿"
-    elif price >= 0.0001:
+    if price >= 0.0001:
         return f"{price:.6f} ฿"
     return f"{price:.8f} ฿"
 
 
 def coin_section(market: dict, meta: dict, signal: dict) -> list:
-    price      = market.get('current_price') or 0.0
-    change_pct = market.get('price_change_percentage_24h') or 0.0
-    high       = market.get('high_24h') or price
-    low        = market.get('low_24h') or price
-    is_up      = float(change_pct) >= 0
+    price      = safe_float(market.get('current_price'))
+    change_pct = safe_float(market.get('price_change_percentage_24h'))
+    high       = safe_float(market.get('high_24h'), price)
+    low        = safe_float(market.get('low_24h'),  price)
+    is_up      = change_pct >= 0.0
 
     return [
         {
@@ -179,13 +191,13 @@ def coin_section(market: dict, meta: dict, signal: dict) -> list:
 def make_bubble(chunk: list, markets_by_id: dict, signals: dict,
                 time_str: str, page: int, total_pages: int) -> dict:
     body_contents = []
-    for i, meta in enumerate(chunk):
-        market = markets_by_id.get(meta['id'])
-        if not market:
-            continue
+    visible = [meta for meta in chunk if markets_by_id.get(meta['id'])]
+
+    for i, meta in enumerate(visible):
+        market = markets_by_id[meta['id']]
         signal = signals.get(meta['id'], {'text': '🟡 รอดูก่อน', 'detail': 'ไม่มีข้อมูล', 'color': '#f39c12'})
         body_contents.extend(coin_section(market, meta, signal))
-        if i < len(chunk) - 1:
+        if i < len(visible) - 1:
             body_contents.append({"type": "separator", "color": "#2a2a4a", "margin": "none"})
 
     return {
@@ -232,11 +244,10 @@ def build_carousel(markets: list, signals: dict) -> dict:
     bkk      = datetime.now(timezone(timedelta(hours=7)))
     time_str = bkk.strftime('%H:%M น. %d/%m/%Y')
 
-    markets_by_id = {m['id']: m for m in markets}
-
-    chunks      = [COINS[i:i + CHUNK_SIZE] for i in range(0, len(COINS), CHUNK_SIZE)]
-    total_pages = len(chunks)
-    bubbles     = [
+    markets_by_id = {m['id']: m for m in markets if isinstance(m, dict)}
+    chunks        = [COINS[i:i + CHUNK_SIZE] for i in range(0, len(COINS), CHUNK_SIZE)]
+    total_pages   = len(chunks)
+    bubbles       = [
         make_bubble(chunk, markets_by_id, signals, time_str, i + 1, total_pages)
         for i, chunk in enumerate(chunks)
     ]
@@ -244,10 +255,7 @@ def build_carousel(markets: list, signals: dict) -> dict:
     return {
         "type": "flex",
         "altText": f"📊 Crypto Alert {len(COINS)} เหรียญ — {time_str}",
-        "contents": {
-            "type": "carousel",
-            "contents": bubbles
-        }
+        "contents": {"type": "carousel", "contents": bubbles}
     }
 
 
@@ -258,7 +266,7 @@ def send_flex(flex_msg: dict):
     headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'}
     res     = requests.post(url, json={"to": USER_ID, "messages": [flex_msg]},
                             headers=headers, timeout=10)
-    print(f"LINE status: {res.status_code}  {res.text[:200]}")
+    print(f"LINE status: {res.status_code}  {res.text[:300]}")
 
 
 def send_text(msg: str):
@@ -273,6 +281,7 @@ def send_text(msg: str):
 def run_check():
     try:
         markets = get_market_data()
+        print(f"Market data: {len(markets)} coins fetched")
         if not markets:
             send_text("⚠️ ไม่สามารถดึงข้อมูลราคาคริปโตได้")
             return
@@ -282,13 +291,16 @@ def run_check():
             try:
                 prices = get_hourly_prices(coin['id'])
                 signals[coin['id']] = get_signal(prices)
+                print(f"  {coin['symbol']}: RSI={calc_rsi(prices):.1f} signal={signals[coin['id']]['text']}")
             except Exception:
+                traceback.print_exc()
                 signals[coin['id']] = {'text': '🟡 รอดูก่อน', 'detail': 'ดึงข้อมูลไม่ได้', 'color': '#f39c12'}
-            time.sleep(0.5)   # avoid CoinGecko rate limit
+            time.sleep(0.5)
 
         send_flex(build_carousel(markets, signals))
 
     except Exception as e:
+        traceback.print_exc()   # full traceback in GitHub Actions log
         send_text(f"⚠️ Error: {str(e)[:100]}")
 
 
