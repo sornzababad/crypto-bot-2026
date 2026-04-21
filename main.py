@@ -6,9 +6,14 @@ LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
 COINS = [
-    {'id': 'bitcoin',  'symbol': 'BTC', 'emoji': '₿'},
-    {'id': 'ethereum', 'symbol': 'ETH', 'emoji': 'Ξ'},
-    {'id': 'solana',   'symbol': 'SOL', 'emoji': '◎'},
+    {'id': 'bitcoin',     'symbol': 'BTC',  'emoji': '₿'},
+    {'id': 'ethereum',    'symbol': 'ETH',  'emoji': 'Ξ'},
+    {'id': 'binancecoin', 'symbol': 'BNB',  'emoji': '◆'},
+    {'id': 'solana',      'symbol': 'SOL',  'emoji': '◎'},
+    {'id': 'ripple',      'symbol': 'XRP',  'emoji': '✕'},
+    {'id': 'dogecoin',    'symbol': 'DOGE', 'emoji': 'Ð'},
+    {'id': 'cardano',     'symbol': 'ADA',  'emoji': '₳'},
+    {'id': 'avalanche-2', 'symbol': 'AVAX', 'emoji': '△'},
 ]
 
 
