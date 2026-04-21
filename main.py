@@ -48,12 +48,14 @@ def get_hourly_prices(coin_id: str) -> list:
     )
     res = requests.get(url, timeout=15)
     res.raise_for_status()
-    return [p[1] for p in res.json()['prices']]
+    return [p[1] for p in res.json()['prices'] if p[1] is not None]
 
 
 # ─── Indicators ──────────────────────────────────────────────────────────────
 
 def calc_ema(prices: list, period: int) -> float:
+    if len(prices) < period:
+        return prices[-1] if prices else 0.0
     k = 2 / (period + 1)
     ema = sum(prices[:period]) / period
     for p in prices[period:]:
@@ -96,7 +98,10 @@ def get_signal(prices: list) -> dict:
 
 # ─── Flex builder ─────────────────────────────────────────────────────────────
 
-def format_price(price: float) -> str:
+def format_price(price) -> str:
+    if price is None:
+        return "N/A"
+    price = float(price)
     if price >= 10_000:
         return f"{price:,.0f} ฿"
     elif price >= 1:
@@ -107,11 +112,11 @@ def format_price(price: float) -> str:
 
 
 def coin_section(market: dict, meta: dict, signal: dict) -> list:
-    price      = market['current_price']
+    price      = market.get('current_price') or 0.0
     change_pct = market.get('price_change_percentage_24h') or 0.0
     high       = market.get('high_24h') or price
     low        = market.get('low_24h') or price
-    is_up      = change_pct >= 0
+    is_up      = float(change_pct) >= 0
 
     return [
         {
