@@ -8,21 +8,31 @@ LINE_TOKEN = os.getenv('LINE_TOKEN')
 USER_ID    = os.getenv('LINE_USER_ID')
 
 COINS = [
-    {'id': 'bitcoin',          'symbol': 'BTC',  'emoji': '₿'},
-    {'id': 'ethereum',         'symbol': 'ETH',  'emoji': 'Ξ'},
-    {'id': 'binancecoin',      'symbol': 'BNB',  'emoji': '◆'},
-    {'id': 'solana',           'symbol': 'SOL',  'emoji': '◎'},
-    {'id': 'ripple',           'symbol': 'XRP',  'emoji': '✕'},
-    {'id': 'dogecoin',         'symbol': 'DOGE', 'emoji': 'Ð'},
-    {'id': 'cardano',          'symbol': 'ADA',  'emoji': '₳'},
-    {'id': 'avalanche-2',      'symbol': 'AVAX', 'emoji': '△'},
-    {'id': 'the-open-network', 'symbol': 'TON',  'emoji': '◈'},
-    {'id': 'tron',             'symbol': 'TRX',  'emoji': '◉'},
-    {'id': 'chainlink',        'symbol': 'LINK', 'emoji': '⬡'},
-    {'id': 'polkadot',         'symbol': 'DOT',  'emoji': '●'},
-    {'id': 'matic-network',    'symbol': 'POL',  'emoji': '⬟'},
-    {'id': 'litecoin',         'symbol': 'LTC',  'emoji': 'Ł'},
-    {'id': 'near',             'symbol': 'NEAR', 'emoji': '◇'},
+    {'id': 'bitcoin',            'symbol': 'BTC',  'emoji': '₿'},
+    {'id': 'ethereum',           'symbol': 'ETH',  'emoji': 'Ξ'},
+    {'id': 'binancecoin',        'symbol': 'BNB',  'emoji': '◆'},
+    {'id': 'solana',             'symbol': 'SOL',  'emoji': '◎'},
+    {'id': 'ripple',             'symbol': 'XRP',  'emoji': '✕'},
+    {'id': 'dogecoin',           'symbol': 'DOGE', 'emoji': 'Ð'},
+    {'id': 'cardano',            'symbol': 'ADA',  'emoji': '₳'},
+    {'id': 'avalanche-2',        'symbol': 'AVAX', 'emoji': '△'},
+    {'id': 'the-open-network',   'symbol': 'TON',  'emoji': '◈'},
+    {'id': 'tron',               'symbol': 'TRX',  'emoji': '◉'},
+    {'id': 'chainlink',          'symbol': 'LINK', 'emoji': '⬡'},
+    {'id': 'polkadot',           'symbol': 'DOT',  'emoji': '●'},
+    {'id': 'matic-network',      'symbol': 'POL',  'emoji': '⬟'},
+    {'id': 'litecoin',           'symbol': 'LTC',  'emoji': 'Ł'},
+    {'id': 'near',               'symbol': 'NEAR', 'emoji': '◇'},
+    {'id': 'shiba-inu',          'symbol': 'SHIB', 'emoji': '🐕'},
+    {'id': 'cosmos',             'symbol': 'ATOM', 'emoji': '⚛'},
+    {'id': 'uniswap',            'symbol': 'UNI',  'emoji': '🦄'},
+    {'id': 'hedera-hashgraph',   'symbol': 'HBAR', 'emoji': '◭'},
+    {'id': 'aptos',              'symbol': 'APT',  'emoji': '◬'},
+    {'id': 'sui',                'symbol': 'SUI',  'emoji': '💧'},
+    {'id': 'arbitrum',           'symbol': 'ARB',  'emoji': '◑'},
+    {'id': 'optimism',           'symbol': 'OP',   'emoji': '◐'},
+    {'id': 'injective-protocol', 'symbol': 'INJ',  'emoji': '◍'},
+    {'id': 'aave',               'symbol': 'AAVE', 'emoji': '👻'},
 ]
 
 CHUNK_SIZE = 5
@@ -94,20 +104,39 @@ def calc_rsi(prices: list, period: int = 14) -> float:
 
 
 def get_signal(prices: list) -> dict:
+    if len(prices) < 30:
+        return {'text': '🟡 รอดูก่อน', 'detail': 'ข้อมูลน้อยเกินไป', 'color': '#f39c12'}
+
     rsi   = calc_rsi(prices)
     ema12 = calc_ema(prices, 12)
     ema26 = calc_ema(prices, 26)
     up    = ema12 > ema26
 
-    if rsi <= 30:
-        return {'text': '🟢 ซื้อได้เลย!', 'detail': f'RSI {rsi:.0f} — Oversold มาก',     'color': '#27ae60'}
-    if rsi <= 42 and up:
-        return {'text': '🟢 น่าซื้อ',      'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',     'color': '#2ecc71'}
+    # Look back ~4 hours to detect RSI direction and EMA crossover
+    lookback    = min(8, len(prices) // 6)
+    prev        = prices[:-lookback] if lookback > 0 else prices
+    prev_rsi    = calc_rsi(prev)
+    prev_ema12  = calc_ema(prev, 12)
+    prev_ema26  = calc_ema(prev, 26)
+    rsi_rising  = rsi > prev_rsi
+    ema_crossed = (prev_ema12 <= prev_ema26) and up   # fresh bullish EMA crossover
+
+    if rsi <= 35:
+        return {'text': '🟢 ซื้อได้เลย!',    'detail': f'RSI {rsi:.0f} — Oversold มาก',                'color': '#27ae60'}
+    # Price dipped then recovered: RSI was in oversold zone and is now rising with uptrend
+    if prev_rsi <= 42 and rsi_rising and up:
+        return {'text': '🟢 สัญญาณฟื้นตัว', 'detail': f'RSI {rsi:.0f}↑ จาก {prev_rsi:.0f} — กำลังฟื้น', 'color': '#27ae60'}
+    # Fresh EMA bullish crossover while RSI not overbought
+    if ema_crossed and rsi < 65:
+        return {'text': '🟢 EMA ตัดขึ้น',    'detail': f'RSI {rsi:.0f} — EMA12 ตัดขึ้น EMA26',         'color': '#2ecc71'}
+    # RSI below midpoint with uptrend — the most common practical buy zone
+    if rsi <= 50 and up:
+        return {'text': '🟢 น่าซื้อ',         'detail': f'RSI {rsi:.0f} — Trend ขึ้น ราคายังไม่แพง',   'color': '#2ecc71'}
     if rsi >= 70:
-        return {'text': '🔴 ขายได้เลย!',  'detail': f'RSI {rsi:.0f} — Overbought มาก',     'color': '#c0392b'}
-    if rsi >= 58 and not up:
-        return {'text': '🔴 น่าขาย',       'detail': f'RSI {rsi:.0f} — EMA กำลังลง',        'color': '#e74c3c'}
-    return     {'text': '🟡 รอดูก่อน',    'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด', 'color': '#f39c12'}
+        return {'text': '🔴 ขายได้เลย!',     'detail': f'RSI {rsi:.0f} — Overbought มาก',               'color': '#c0392b'}
+    if rsi >= 60 and not up:
+        return {'text': '🔴 น่าขาย',          'detail': f'RSI {rsi:.0f} — EMA กำลังลง',                 'color': '#e74c3c'}
+    return     {'text': '🟡 รอดูก่อน',       'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด',          'color': '#f39c12'}
 
 
 # ─── Flex builder ─────────────────────────────────────────────────────────────
@@ -233,7 +262,7 @@ def make_bubble(chunk: list, markets_by_id: dict, signals: dict,
             "backgroundColor": "#12122a",
             "paddingAll": "8px",
             "contents": [
-                {"type": "text", "text": "RSI-14 + EMA-12/26  ·  ใช้ประกอบการตัดสินใจเท่านั้น",
+                {"type": "text", "text": "RSI-14 + EMA-12/26 + สัญญาณฟื้นตัว  ·  ใช้ประกอบการตัดสินใจเท่านั้น",
                  "color": "#555577", "size": "xxs", "align": "center"}
             ]
         }
