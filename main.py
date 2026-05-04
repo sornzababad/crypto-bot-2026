@@ -22,7 +22,6 @@ from bot.config import (
     MAX_POSITIONS, TRADE_PAIRS,
 )
 from bot.exchange import (
-    create_exchange,
     get_closing_prices,
     get_free_thb,
     get_coin_balance,
@@ -54,18 +53,15 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
 
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
 def run():
-    state    = load_state()
-    exchange = create_exchange()
+    state = load_state()
 
-    # Snapshot free THB at start of run
-    thb_balance = get_free_thb(exchange)
-    total_value = thb_balance  # will add coin values below
-    pnl_map     = {}           # symbol → {'pnl_pct': float}
+    thb_balance = get_free_thb()
+    total_value = thb_balance
+    pnl_map     = {}
 
-    # Remember initial investment for overall P&L calculation
     if state.get('initial_thb', 0) == 0 and thb_balance > 0:
         state['initial_thb'] = thb_balance
         print(f"First run — recording initial balance: {thb_balance:.0f} THB")
@@ -76,12 +72,12 @@ def run():
     for symbol, pos in list(state['positions'].items()):
         coin = symbol.split('/')[0]
         try:
-            qty          = float(pos['quantity'])
-            entry_price  = float(pos['entry_price'])
-            current_price = get_current_price(exchange, symbol)
-            coin_value   = qty * current_price
-            total_value += coin_value
-            pnl_pct      = (current_price - entry_price) / entry_price * 100
+            qty           = float(pos['quantity'])
+            entry_price   = float(pos['entry_price'])
+            current_price = get_current_price(symbol)
+            coin_value    = qty * current_price
+            total_value  += coin_value
+            pnl_pct       = (current_price - entry_price) / entry_price * 100
             pnl_map[symbol] = {'pnl_pct': pnl_pct}
 
             print(f"  {symbol}: entry={entry_price:.2f} now={current_price:.2f}"
@@ -98,10 +94,10 @@ def run():
                 reason      = f'Stop Loss {pnl_pct:.2f}%'
 
             if should_sell:
-                actual_qty = get_coin_balance(exchange, coin)
+                actual_qty = get_coin_balance(coin)
                 if actual_qty > 0:
-                    order        = place_market_sell(exchange, symbol, actual_qty)
-                    filled_price = float(order.get('average') or current_price)
+                    order        = place_market_sell(symbol, actual_qty)
+                    filled_price = float(order.get('fills', [{}])[0].get('price', 0) or current_price)
                     thb_returned = actual_qty * filled_price
                     notify_sell(symbol, filled_price, actual_qty,
                                 thb_returned, reason, pnl_pct)
@@ -117,54 +113,54 @@ def run():
 
     # ── Step 2: Look for new buy opportunities ────────────────────────────────
     open_count    = len(state['positions'])
-    thb_balance   = get_free_thb(exchange)  # Refresh after any sells
+    thb_balance   = get_free_thb()
     tradeable_thb = thb_balance * (1 - RESERVE_PCT)
 
-    print(f"\n=== Scanning for buys | THB available: {tradeable_thb:.0f}"
+    print(f"\n=== Scanning for buys | THB: {tradeable_thb:.0f}"
           f" | positions: {open_count}/{MAX_POSITIONS} ===")
 
     for symbol in TRADE_PAIRS:
         if open_count >= MAX_POSITIONS:
-            print(f"  Max positions ({MAX_POSITIONS}) reached — skipping scan")
+            print(f"  Max positions ({MAX_POSITIONS}) reached")
             break
         if symbol in state['positions']:
-            continue  # Already holding this coin
+            continue
 
         try:
-            prices = get_closing_prices(exchange, symbol)
+            prices = get_closing_prices(symbol)
             signal = get_signal(prices)
             rsi    = round(calc_rsi(prices), 1)
             print(f"  {symbol}: RSI={rsi} signal={signal}")
 
             if signal in ('BUY', 'BUY_STRONG'):
-                thb_to_use = tradeable_thb * MAX_POS_PCT
-                thb_to_use = max(thb_to_use, MIN_ORDER_THB)
+                thb_to_use = max(tradeable_thb * MAX_POS_PCT, MIN_ORDER_THB)
 
                 if thb_to_use > tradeable_thb:
-                    print(f"  Not enough THB for {symbol} (need {thb_to_use:.0f})")
+                    print(f"  Not enough THB for {symbol}")
                     continue
 
-                order       = place_market_buy(exchange, symbol, thb_to_use)
-                filled_qty  = float(order.get('filled') or order.get('amount') or 0)
-                avg_price   = float(order.get('average') or 0)
+                order      = place_market_buy(symbol, thb_to_use)
+                fills      = order.get('fills', [])
+                filled_qty = float(order.get('executedQty') or sum(float(f['qty']) for f in fills) or 0)
+                avg_price  = (
+                    float(order.get('cummulativeQuoteQty', 0)) / filled_qty
+                    if filled_qty > 0 else get_current_price(symbol)
+                )
 
-                if filled_qty <= 0 or avg_price <= 0:
-                    # Fallback: estimate from current price
-                    avg_price  = get_current_price(exchange, symbol)
+                if filled_qty <= 0:
                     filled_qty = thb_to_use / avg_price
 
                 invested_thb = filled_qty * avg_price
 
                 state['positions'][symbol] = {
-                    'quantity':    filled_qty,
-                    'entry_price': avg_price,
-                    'entry_time':  datetime.now(timezone.utc).isoformat(),
+                    'quantity':     filled_qty,
+                    'entry_price':  avg_price,
+                    'entry_time':   datetime.now(timezone.utc).isoformat(),
                     'invested_thb': invested_thb,
                 }
 
                 notify_buy(symbol, avg_price, filled_qty, invested_thb, rsi, signal)
-                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ {avg_price:.2f}"
-                      f" ({invested_thb:.0f} THB)")
+                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ {avg_price:.2f} ({invested_thb:.0f} THB)")
 
                 tradeable_thb -= invested_thb
                 open_count    += 1
@@ -173,16 +169,14 @@ def run():
         except Exception:
             traceback.print_exc()
 
-    # ── Step 3: Hourly portfolio summary ─────────────────────────────────────
+    # ── Step 3: Hourly portfolio summary ──────────────────────────────────────
     now_ts = int(datetime.now(timezone.utc).timestamp())
     if now_ts - state.get('last_summary_ts', 0) >= SUMMARY_EVERY:
-        final_thb   = get_free_thb(exchange)
-        # Re-add coin values for summary total
-        coin_total  = 0.0
+        final_thb  = get_free_thb()
+        coin_total = 0.0
         for symbol, pos in state['positions'].items():
             try:
-                price      = get_current_price(exchange, symbol)
-                coin_total += float(pos['quantity']) * price
+                coin_total += float(pos['quantity']) * get_current_price(symbol)
             except Exception:
                 pass
         total_value = final_thb + coin_total
@@ -190,8 +184,7 @@ def run():
         state['last_summary_ts'] = now_ts
 
     save_state(state)
-    print(f"\nDone. THB balance: {get_free_thb(exchange):.0f}"
-          f" | Positions: {list(state['positions'].keys())}")
+    print(f"\nDone. THB: {get_free_thb():.0f} | Positions: {list(state['positions'].keys())}")
 
 
 if __name__ == '__main__':
