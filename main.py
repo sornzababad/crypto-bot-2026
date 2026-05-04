@@ -35,7 +35,7 @@ from bot.notifier import (
 )
 
 STATE_FILE    = Path('state.json')
-SUMMARY_EVERY = 3600  # seconds between portfolio summaries
+SUMMARY_EVERY = 1800  # seconds between portfolio summaries (every 30-min run)
 
 
 # ─── State helpers ────────────────────────────────────────────────────────────
@@ -118,6 +118,8 @@ def run():
     print(f"\n=== Scanning for buys | THB: {tradeable_thb:.0f}"
           f" | positions: {open_count}/{MAX_POSITIONS} ===")
 
+    scan_results = []  # collect RSI snapshot for summary
+
     for symbol in TRADE_PAIRS:
         if open_count >= MAX_POSITIONS:
             print(f"  Max positions ({MAX_POSITIONS}) reached")
@@ -130,6 +132,7 @@ def run():
             signal = get_signal(prices)
             rsi    = round(calc_rsi(prices), 1)
             print(f"  {symbol}: RSI={rsi} signal={signal}")
+            scan_results.append((symbol, rsi, signal))
 
             if signal in ('BUY', 'BUY_STRONG'):
                 thb_to_use = max(tradeable_thb * MAX_POS_PCT, MIN_ORDER_THB)
@@ -180,7 +183,7 @@ def run():
                 pass
         total_value = final_thb + coin_total
         notify_summary(final_thb, total_value, pnl_map,
-                       state.get('realized_pnl_thb', 0.0))
+                       state.get('realized_pnl_thb', 0.0), scan_results)
         state['last_summary_ts'] = now_ts
 
     save_state(state)
