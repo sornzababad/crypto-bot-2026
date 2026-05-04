@@ -1,4 +1,4 @@
-from bot.config import RSI_BUY_STRONG, RSI_BUY_NORMAL, RSI_SELL_NORMAL, RSI_SELL_STRONG
+from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD
 
 
 def calc_ema(prices: list[float], period: int) -> float:
@@ -31,23 +31,33 @@ def calc_rsi(prices: list[float], period: int = 14) -> float:
 
 def get_signal(prices: list[float]) -> str:
     """
-    Returns one of: 'BUY_STRONG', 'BUY', 'HOLD', 'SELL', 'SELL_STRONG'
-    Requires at least 26 prices for EMA-26 to be meaningful.
+    EMA State-primary strategy with RSI guards.
+
+    Logic:
+      - EMA_FAST > EMA_SLOW  →  uptrend  →  BUY  (unless RSI overbought)
+      - EMA_FAST < EMA_SLOW  →  downtrend →  SELL (unless RSI oversold)
+      - RSI guards only block entries in extreme conditions to avoid chasing
+
+    Returns: 'BUY_STRONG' | 'BUY' | 'HOLD' | 'SELL' | 'SELL_STRONG'
     """
-    if len(prices) < 26:
+    if len(prices) < EMA_SLOW:
         return 'HOLD'
 
     rsi     = calc_rsi(prices)
-    ema12   = calc_ema(prices, 12)
-    ema26   = calc_ema(prices, 26)
-    uptrend = ema12 > ema26
+    ema_f   = calc_ema(prices, EMA_FAST)
+    ema_s   = calc_ema(prices, EMA_SLOW)
+    uptrend = ema_f > ema_s
 
-    if rsi <= RSI_BUY_STRONG:
-        return 'BUY_STRONG'
-    if rsi <= RSI_BUY_NORMAL and uptrend:
-        return 'BUY'
-    if rsi >= RSI_SELL_STRONG:
-        return 'SELL_STRONG'
-    if rsi >= RSI_SELL_NORMAL and not uptrend:
-        return 'SELL'
-    return 'HOLD'
+    if uptrend:
+        if rsi >= RSI_OVERBOUGHT:
+            return 'HOLD'          # trending up but too hot — wait for cooldown
+        if rsi <= 40:
+            return 'BUY_STRONG'    # uptrend + deeply oversold = strong entry
+        return 'BUY'               # uptrend — standard entry
+
+    else:  # downtrend
+        if rsi <= RSI_OVERSOLD:
+            return 'HOLD'          # trending down but too cold — bounce risk
+        if rsi >= 65:
+            return 'SELL_STRONG'   # downtrend + overbought = strong exit
+        return 'SELL'              # downtrend — standard exit

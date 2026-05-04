@@ -1,24 +1,24 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-TAKE_PROFIT_PCT  = 0.025   # Sell when +2.5% profit
-STOP_LOSS_PCT    = 0.030   # Sell when -3.0% loss
-MAX_POS_PCT      = 0.25    # Max 25% of tradeable THB per coin
+TAKE_PROFIT_PCT  = 0.040   # Sell when +4.0% profit  (was 2.5%)
+STOP_LOSS_PCT    = 0.025   # Sell when -2.5% loss    (was 3.0%)
+MAX_POS_PCT      = 0.30    # Max 30% of tradeable THB per coin (was 25%)
 MIN_ORDER_THB    = 200.0   # Minimum single order in THB
-RESERVE_PCT      = 0.10    # Always keep 10% of balance in THB (never trade)
-MAX_POSITIONS    = 4       # Hold at most 4 coins at once
+RESERVE_PCT      = 0.05    # Keep 5% cash reserve    (was 10%)
+MAX_POSITIONS    = 5       # Hold at most 5 coins     (was 4)
 
-# ─── Signal Thresholds (RSI-14) ───────────────────────────────────────────────
-RSI_BUY_STRONG   = 38      # RSI <= 38 → strong buy regardless of EMA
-RSI_BUY_NORMAL   = 50      # RSI <= 50 + uptrend (EMA12 > EMA26) → buy
-RSI_SELL_NORMAL  = 52      # RSI >= 52 + downtrend → sell
-RSI_SELL_STRONG  = 62      # RSI >= 62 → strong sell regardless of EMA
+# ─── EMA Settings ─────────────────────────────────────────────────────────────
+EMA_FAST         = 9       # Fast EMA — more reactive (was 12)
+EMA_SLOW         = 21      # Slow EMA — trend baseline (was 26)
+
+# ─── RSI Guards (prevent entry in extreme conditions only) ────────────────────
+RSI_OVERBOUGHT   = 72      # Don't BUY if RSI >= 72 (too hot)
+RSI_OVERSOLD     = 28      # Don't SELL if RSI <= 28 (too cold, bounce risk)
 
 # ─── OHLCV Settings ───────────────────────────────────────────────────────────
 KLINE_TIMEFRAME  = '1h'    # Hourly candles
-KLINE_LIMIT      = 72      # 3 days of data (enough for RSI-14 + EMA-26)
+KLINE_LIMIT      = 72      # 3 days of data
 
 # ─── Target Trading Pairs on BinanceTH (THB quote) ───────────────────────────
-# Bot scans all pairs every 15 min but holds MAX_POSITIONS (4) at most.
-# Pairs ranked by volatility + liquidity — higher chance of hitting signals.
 TRADE_PAIRS = [
     # Tier 1 — highest liquidity, most reliable signals
     'BTC/THB',
