@@ -62,10 +62,6 @@ def run():
     total_value = thb_balance
     pnl_map     = {}
 
-    if state.get('initial_thb', 0) == 0 and thb_balance > 0:
-        state['initial_thb'] = thb_balance
-        print(f"First run — recording initial balance: {thb_balance:.0f} THB")
-
     # ── Step 1: Manage open positions (stop-loss / take-profit) ───────────────
     print(f"\n=== Open positions: {list(state['positions'].keys())} ===")
 
@@ -99,6 +95,9 @@ def run():
                     order        = place_market_sell(symbol, actual_qty)
                     filled_price = float(order.get('fills', [{}])[0].get('price', 0) or current_price)
                     thb_returned = actual_qty * filled_price
+                    invested_thb = float(pos.get('invested_thb', thb_returned))
+                    realized_thb = thb_returned - invested_thb
+                    state['realized_pnl_thb'] = state.get('realized_pnl_thb', 0) + realized_thb
                     notify_sell(symbol, filled_price, actual_qty,
                                 thb_returned, reason, pnl_pct)
                     print(f"  SOLD {symbol}: {reason}")
@@ -180,7 +179,8 @@ def run():
             except Exception:
                 pass
         total_value = final_thb + coin_total
-        notify_summary(final_thb, total_value, pnl_map, state.get('initial_thb', total_value))
+        notify_summary(final_thb, total_value, pnl_map,
+                       state.get('realized_pnl_thb', 0.0))
         state['last_summary_ts'] = now_ts
 
     save_state(state)

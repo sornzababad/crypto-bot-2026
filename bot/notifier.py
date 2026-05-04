@@ -60,14 +60,13 @@ def notify_sell(symbol: str, price: float, quantity: float,
 
 
 def notify_summary(thb_balance: float, total_value: float,
-                   positions: dict, initial_thb: float):
-    overall_pnl = (total_value - initial_thb) / initial_thb * 100 if initial_thb else 0
-    sign        = '+' if overall_pnl >= 0 else ''
+                   positions: dict, realized_pnl_thb: float):
+    sign  = '+' if realized_pnl_thb >= 0 else ''
     lines = [
         f"📊 สรุปพอร์ต — {_now_bkk()}",
         f"มูลค่ารวม: {total_value:,.0f} ฿",
         f"THB ว่าง: {thb_balance:,.0f} ฿",
-        f"P&L รวม: {sign}{overall_pnl:.2f}%",
+        f"กำไร/ขาดทุนสะสม: {sign}{realized_pnl_thb:,.2f} ฿",
         "",
     ]
     if positions:
