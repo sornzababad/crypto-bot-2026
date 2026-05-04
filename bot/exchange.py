@@ -1,6 +1,7 @@
 """
 Direct REST client for BinanceTH (api.binance.th).
-Uses only /api/v3/ endpoints — no /sapi/ calls that trigger geo-blocks.
+BinanceTH uses /openapi/v1/ (trading) and /openapi/quote/v1/ (market data)
+— different from Binance global's /api/v3/.
 """
 
 import hmac
@@ -55,46 +56,48 @@ def _post_private(path: str, params: dict | None = None) -> any:
 
 @lru_cache(maxsize=32)
 def _step_size(raw_symbol: str) -> float:
-    info = _get_public('/api/v3/exchangeInfo')
-    for s in info.get('symbols', []):
-        if s['symbol'] == raw_symbol:
-            for f in s.get('filters', []):
-                if f['filterType'] == 'LOT_SIZE':
-                    return float(f['stepSize'])
+    """Fetch LOT_SIZE stepSize from exchange info for quantity rounding."""
+    try:
+        info = _get_public('/openapi/v1/exchangeInfo')
+        for s in info.get('symbols', []):
+            if s['symbol'] == raw_symbol:
+                for f in s.get('filters', []):
+                    if f['filterType'] == 'LOT_SIZE':
+                        return float(f['stepSize'])
+    except Exception:
+        pass
     return 1e-6
 
 
 def _round_qty(symbol: str, qty: float) -> float:
     raw  = symbol.replace('/', '')
     step = _step_size(raw)
-    precision = max(0, -int(f'{step:.10f}'.rstrip('0').find('.') - len(f'{step:.10f}'.rstrip('0')) + 1))
-    # simpler: count decimal places in step
-    s = f'{step:.10f}'.rstrip('0')
-    decimals = len(s.split('.')[1]) if '.' in s else 0
-    return round(int(qty / step) * step, decimals)
+    s    = f'{step:.10f}'.rstrip('0')
+    decs = len(s.split('.')[1]) if '.' in s else 0
+    return round(int(qty / step) * step, decs)
 
 
 # ─── Public endpoints ─────────────────────────────────────────────────────────
 
 def get_closing_prices(symbol: str) -> list[float]:
-    interval_map = {'1h': '1h', '15m': '15m', '4h': '4h', '1d': '1d'}
-    data = _get_public('/api/v3/klines', {
+    data = _get_public('/openapi/quote/v1/klines', {
         'symbol':   symbol.replace('/', ''),
-        'interval': interval_map.get(KLINE_TIMEFRAME, '1h'),
+        'interval': KLINE_TIMEFRAME,
         'limit':    KLINE_LIMIT,
     })
     return [float(c[4]) for c in data]
 
 
 def get_current_price(symbol: str) -> float:
-    data = _get_public('/api/v3/ticker/price', {'symbol': symbol.replace('/', '')})
+    data = _get_public('/openapi/quote/v1/ticker/price',
+                       {'symbol': symbol.replace('/', '')})
     return float(data['price'])
 
 
 # ─── Private endpoints ────────────────────────────────────────────────────────
 
 def get_balances() -> dict[str, float]:
-    data = _get_private('/api/v3/account')
+    data = _get_private('/openapi/v1/account')
     return {b['asset']: float(b['free']) for b in data.get('balances', [])
             if float(b['free']) > 0}
 
@@ -110,7 +113,7 @@ def get_coin_balance(coin: str) -> float:
 def place_market_buy(symbol: str, thb_amount: float) -> dict:
     price    = get_current_price(symbol)
     quantity = _round_qty(symbol, thb_amount / price)
-    return _post_private('/api/v3/order', {
+    return _post_private('/openapi/v1/order', {
         'symbol':   symbol.replace('/', ''),
         'side':     'BUY',
         'type':     'MARKET',
@@ -120,7 +123,7 @@ def place_market_buy(symbol: str, thb_amount: float) -> dict:
 
 def place_market_sell(symbol: str, quantity: float) -> dict:
     quantity = _round_qty(symbol, quantity)
-    return _post_private('/api/v3/order', {
+    return _post_private('/openapi/v1/order', {
         'symbol':   symbol.replace('/', ''),
         'side':     'SELL',
         'type':     'MARKET',
