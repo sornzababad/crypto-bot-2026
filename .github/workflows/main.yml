@@ -2,7 +2,7 @@ name: Crypto-Trading-Bot
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   # Every 15 minutes (24/7, free on GitHub Actions)
+    - cron: '*/15 * * * *'   # Every 15 min — Bangkok: :00 :15 :30 :45 each hour
   workflow_dispatch:           # Manual trigger from GitHub UI
 
 jobs:
