@@ -1,0 +1,8 @@
+# Bot runtime state — only committed to main by the workflow (git add -f)
+# Excluded from feature branches to prevent merge conflicts
+state.json
+
+# Python
+__pycache__/
+*.py[cod]
+.env

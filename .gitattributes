@@ -1,0 +1,3 @@
+# state.json is managed exclusively by the bot workflow on main.
+# It is listed in .gitignore so feature branches never touch it.
+# The workflow uses "git add -f state.json" to bypass .gitignore.
