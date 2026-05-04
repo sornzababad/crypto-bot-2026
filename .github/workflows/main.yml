@@ -34,8 +34,8 @@ jobs:
 
       - name: Run trading bot
         env:
-          BINANCE_API_KEY:    ${{ secrets.BINANCE_API_KEY }}
-          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+          BINANCE_API_KEY:    ${{ secrets.BINANCE_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_SECRET }}
           LINE_TOKEN:         ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
         run: python main.py
