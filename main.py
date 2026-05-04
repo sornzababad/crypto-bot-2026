@@ -1,308 +1,202 @@
-import os
+"""
+Crypto Trading Bot — BinanceTH
+Runs every 15 min via GitHub Actions (free).
+
+Flow each run:
+  1. Load state (open positions) from state.json
+  2. Check each open position → sell if stop-loss or take-profit hit
+  3. Scan all target pairs for buy signals → open new positions
+  4. Send hourly portfolio summary to LINE
+  5. Save updated state back to state.json (committed by workflow)
+"""
+
+import json
 import time
 import traceback
-import requests
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+from pathlib import Path
 
-LINE_TOKEN = os.getenv('LINE_TOKEN')
-USER_ID    = os.getenv('LINE_USER_ID')
+from bot.config import (
+    TAKE_PROFIT_PCT, STOP_LOSS_PCT,
+    MAX_POS_PCT, MIN_ORDER_THB, RESERVE_PCT,
+    MAX_POSITIONS, TRADE_PAIRS,
+)
+from bot.exchange import (
+    create_exchange,
+    get_closing_prices,
+    get_free_thb,
+    get_coin_balance,
+    get_current_price,
+    place_market_buy,
+    place_market_sell,
+)
+from bot.strategy import get_signal, calc_rsi
+from bot.notifier import (
+    notify_buy, notify_sell, notify_summary, notify_error,
+)
 
-COINS = [
-    {'id': 'bitcoin',          'symbol': 'BTC',  'emoji': '₿'},
-    {'id': 'ethereum',         'symbol': 'ETH',  'emoji': 'Ξ'},
-    {'id': 'binancecoin',      'symbol': 'BNB',  'emoji': '◆'},
-    {'id': 'solana',           'symbol': 'SOL',  'emoji': '◎'},
-    {'id': 'ripple',           'symbol': 'XRP',  'emoji': '✕'},
-    {'id': 'dogecoin',         'symbol': 'DOGE', 'emoji': 'Ð'},
-    {'id': 'cardano',          'symbol': 'ADA',  'emoji': '₳'},
-    {'id': 'avalanche-2',      'symbol': 'AVAX', 'emoji': '△'},
-    {'id': 'the-open-network', 'symbol': 'TON',  'emoji': '◈'},
-    {'id': 'tron',             'symbol': 'TRX',  'emoji': '◉'},
-    {'id': 'chainlink',        'symbol': 'LINK', 'emoji': '⬡'},
-    {'id': 'polkadot',         'symbol': 'DOT',  'emoji': '●'},
-    {'id': 'matic-network',    'symbol': 'POL',  'emoji': '⬟'},
-    {'id': 'litecoin',         'symbol': 'LTC',  'emoji': 'Ł'},
-    {'id': 'near',             'symbol': 'NEAR', 'emoji': '◇'},
-]
-
-CHUNK_SIZE = 5
-
-
-def safe_float(val, default: float = 0.0) -> float:
-    try:
-        if val is None:
-            return default
-        return float(val)
-    except (TypeError, ValueError):
-        return default
+STATE_FILE    = Path('state.json')
+SUMMARY_EVERY = 3600  # seconds between portfolio summaries
 
 
-# ─── Data fetching ────────────────────────────────────────────────────────────
+# ─── State helpers ────────────────────────────────────────────────────────────
 
-def get_market_data() -> list:
-    ids = ','.join(c['id'] for c in COINS)
-    url = (
-        'https://api.coingecko.com/api/v3/coins/markets'
-        f'?vs_currency=thb&ids={ids}&order=market_cap_desc'
-        '&sparkline=false&price_change_percentage=24h'
-    )
-    res = requests.get(url, timeout=15)
-    res.raise_for_status()
-    data = res.json()
-    return data if isinstance(data, list) else []
+def load_state() -> dict:
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text())
+        except Exception:
+            pass
+    return {'positions': {}, 'last_summary_ts': 0, 'initial_thb': 0}
 
 
-def get_hourly_prices(coin_id: str) -> list:
-    url = (
-        f'https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart'
-        '?vs_currency=thb&days=3'
-    )
-    res = requests.get(url, timeout=15)
-    res.raise_for_status()
-    raw = res.json()
-    return [float(p[1]) for p in raw.get('prices', []) if p[1] is not None]
+def save_state(state: dict):
+    STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
 
 
-# ─── Indicators ──────────────────────────────────────────────────────────────
+# ─── Main ────────────────────────────────────────────────────────────────────
 
-def calc_ema(prices: list, period: int) -> float:
-    if not prices:
-        return 0.0
-    if len(prices) < period:
-        return prices[-1]
-    k = 2 / (period + 1)
-    ema = sum(prices[:period]) / period
-    for p in prices[period:]:
-        ema = p * k + ema * (1 - k)
-    return ema
+def run():
+    state    = load_state()
+    exchange = create_exchange()
 
+    # Snapshot free THB at start of run
+    thb_balance = get_free_thb(exchange)
+    total_value = thb_balance  # will add coin values below
+    pnl_map     = {}           # symbol → {'pnl_pct': float}
 
-def calc_rsi(prices: list, period: int = 14) -> float:
-    if len(prices) < period + 1:
-        return 50.0
-    changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-    gains  = [max(c, 0.0) for c in changes]
-    losses = [abs(min(c, 0.0)) for c in changes]
-    ag = sum(gains[:period])  / period
-    al = sum(losses[:period]) / period
-    for i in range(period, len(changes)):
-        ag = (ag * (period - 1) + gains[i])  / period
-        al = (al * (period - 1) + losses[i]) / period
-    if al == 0:
-        return 100.0
-    return 100.0 - (100.0 / (1.0 + ag / al))
+    # Remember initial investment for overall P&L calculation
+    if state.get('initial_thb', 0) == 0 and thb_balance > 0:
+        state['initial_thb'] = thb_balance
+        print(f"First run — recording initial balance: {thb_balance:.0f} THB")
 
+    # ── Step 1: Manage open positions (stop-loss / take-profit) ───────────────
+    print(f"\n=== Open positions: {list(state['positions'].keys())} ===")
 
-def get_signal(prices: list) -> dict:
-    rsi   = calc_rsi(prices)
-    ema12 = calc_ema(prices, 12)
-    ema26 = calc_ema(prices, 26)
-    up    = ema12 > ema26
+    for symbol, pos in list(state['positions'].items()):
+        coin = symbol.split('/')[0]
+        try:
+            qty          = float(pos['quantity'])
+            entry_price  = float(pos['entry_price'])
+            current_price = get_current_price(exchange, symbol)
+            coin_value   = qty * current_price
+            total_value += coin_value
+            pnl_pct      = (current_price - entry_price) / entry_price * 100
+            pnl_map[symbol] = {'pnl_pct': pnl_pct}
 
-    if rsi <= 30:
-        return {'text': '🟢 ซื้อได้เลย!', 'detail': f'RSI {rsi:.0f} — Oversold มาก',     'color': '#27ae60'}
-    if rsi <= 42 and up:
-        return {'text': '🟢 น่าซื้อ',      'detail': f'RSI {rsi:.0f} — EMA กำลังขึ้น',     'color': '#2ecc71'}
-    if rsi >= 70:
-        return {'text': '🔴 ขายได้เลย!',  'detail': f'RSI {rsi:.0f} — Overbought มาก',     'color': '#c0392b'}
-    if rsi >= 58 and not up:
-        return {'text': '🔴 น่าขาย',       'detail': f'RSI {rsi:.0f} — EMA กำลังลง',        'color': '#e74c3c'}
-    return     {'text': '🟡 รอดูก่อน',    'detail': f'RSI {rsi:.0f} — ยังไม่มีสัญญาณชัด', 'color': '#f39c12'}
+            print(f"  {symbol}: entry={entry_price:.2f} now={current_price:.2f}"
+                  f" pnl={pnl_pct:+.2f}%")
 
+            should_sell = False
+            reason      = ''
 
-# ─── Flex builder ─────────────────────────────────────────────────────────────
+            if pnl_pct >= TAKE_PROFIT_PCT * 100:
+                should_sell = True
+                reason      = f'Take Profit +{pnl_pct:.2f}%'
+            elif pnl_pct <= -(STOP_LOSS_PCT * 100):
+                should_sell = True
+                reason      = f'Stop Loss {pnl_pct:.2f}%'
 
-def format_price(val) -> str:
-    price = safe_float(val)
-    if price >= 10_000:
-        return f"{price:,.0f} ฿"
-    if price >= 1:
-        return f"{price:,.2f} ฿"
-    if price >= 0.0001:
-        return f"{price:.6f} ฿"
-    return f"{price:.8f} ฿"
+            if should_sell:
+                actual_qty = get_coin_balance(exchange, coin)
+                if actual_qty > 0:
+                    order        = place_market_sell(exchange, symbol, actual_qty)
+                    filled_price = float(order.get('average') or current_price)
+                    thb_returned = actual_qty * filled_price
+                    notify_sell(symbol, filled_price, actual_qty,
+                                thb_returned, reason, pnl_pct)
+                    print(f"  SOLD {symbol}: {reason}")
+                else:
+                    print(f"  {symbol}: no balance found — removing from state")
+                del state['positions'][symbol]
+                pnl_map.pop(symbol, None)
 
-
-def coin_section(market: dict, meta: dict, signal: dict) -> list:
-    price      = safe_float(market.get('current_price'))
-    change_pct = safe_float(market.get('price_change_percentage_24h'))
-    high       = safe_float(market.get('high_24h'), price)
-    low        = safe_float(market.get('low_24h'),  price)
-    is_up      = change_pct >= 0.0
-
-    return [
-        {
-            "type": "box",
-            "layout": "horizontal",
-            "paddingTop": "10px",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": f"{meta['emoji']} {meta['symbol']}",
-                    "weight": "bold",
-                    "size": "md",
-                    "color": "#ffffff",
-                    "flex": 2
-                },
-                {
-                    "type": "text",
-                    "text": format_price(price),
-                    "size": "sm",
-                    "color": "#ffffff",
-                    "align": "end",
-                    "flex": 4
-                },
-                {
-                    "type": "text",
-                    "text": f"{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
-                    "size": "sm",
-                    "color": '#2ecc71' if is_up else '#e74c3c',
-                    "align": "end",
-                    "weight": "bold",
-                    "flex": 3
-                }
-            ]
-        },
-        {
-            "type": "box",
-            "layout": "horizontal",
-            "margin": "sm",
-            "contents": [
-                {"type": "text", "text": f"H: {format_price(high)}", "size": "xxs", "color": "#888899", "flex": 1},
-                {"type": "text", "text": f"L: {format_price(low)}",  "size": "xxs", "color": "#888899", "align": "end", "flex": 1}
-            ]
-        },
-        {
-            "type": "box",
-            "layout": "horizontal",
-            "margin": "sm",
-            "paddingAll": "5px",
-            "backgroundColor": "#1e1e3a",
-            "cornerRadius": "6px",
-            "contents": [
-                {"type": "text", "text": signal['text'],   "size": "sm",  "weight": "bold", "color": signal['color'], "flex": 0},
-                {"type": "text", "text": signal['detail'], "size": "xxs", "color": "#888899", "align": "end", "flex": 1, "gravity": "center"}
-            ]
-        },
-        {"type": "box", "layout": "vertical", "height": "8px", "contents": []}
-    ]
-
-
-def make_bubble(chunk: list, markets_by_id: dict, signals: dict,
-                time_str: str, page: int, total_pages: int) -> dict:
-    body_contents = []
-    visible = [meta for meta in chunk if markets_by_id.get(meta['id'])]
-
-    for i, meta in enumerate(visible):
-        market = markets_by_id[meta['id']]
-        signal = signals.get(meta['id'], {'text': '🟡 รอดูก่อน', 'detail': 'ไม่มีข้อมูล', 'color': '#f39c12'})
-        body_contents.extend(coin_section(market, meta, signal))
-        if i < len(visible) - 1:
-            body_contents.append({"type": "separator", "color": "#2a2a4a", "margin": "none"})
-
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "header": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#12122a",
-            "paddingAll": "14px",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": [
-                        {"type": "text", "text": "📊 Crypto Alert", "weight": "bold", "color": "#ffffff", "size": "lg", "flex": 1},
-                        {"type": "text", "text": f"{page}/{total_pages}", "size": "xs", "color": "#8888aa", "align": "end", "gravity": "bottom", "flex": 0}
-                    ]
-                },
-                {"type": "text", "text": f"อัปเดต: {time_str}", "color": "#8888aa", "size": "xxs", "margin": "sm"}
-            ]
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#0d0d1f",
-            "paddingAll": "14px",
-            "contents": body_contents
-        },
-        "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#12122a",
-            "paddingAll": "8px",
-            "contents": [
-                {"type": "text", "text": "RSI-14 + EMA-12/26  ·  ใช้ประกอบการตัดสินใจเท่านั้น",
-                 "color": "#555577", "size": "xxs", "align": "center"}
-            ]
-        }
-    }
-
-
-def build_carousel(markets: list, signals: dict) -> dict:
-    bkk      = datetime.now(timezone(timedelta(hours=7)))
-    time_str = bkk.strftime('%H:%M น. %d/%m/%Y')
-
-    markets_by_id = {m['id']: m for m in markets if isinstance(m, dict)}
-    chunks        = [COINS[i:i + CHUNK_SIZE] for i in range(0, len(COINS), CHUNK_SIZE)]
-    total_pages   = len(chunks)
-    bubbles       = [
-        make_bubble(chunk, markets_by_id, signals, time_str, i + 1, total_pages)
-        for i, chunk in enumerate(chunks)
-    ]
-
-    return {
-        "type": "flex",
-        "altText": f"📊 Crypto Alert {len(COINS)} เหรียญ — {time_str}",
-        "contents": {"type": "carousel", "contents": bubbles}
-    }
-
-
-# ─── LINE push ────────────────────────────────────────────────────────────────
-
-def send_flex(flex_msg: dict):
-    url     = 'https://api.line.me/v2/bot/message/push'
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'}
-    res     = requests.post(url, json={"to": USER_ID, "messages": [flex_msg]},
-                            headers=headers, timeout=10)
-    print(f"LINE status: {res.status_code}  {res.text[:300]}")
-
-
-def send_text(msg: str):
-    url     = 'https://api.line.me/v2/bot/message/push'
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'}
-    requests.post(url, json={"to": USER_ID, "messages": [{"type": "text", "text": msg}]},
-                  headers=headers, timeout=10)
-
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
-
-def run_check():
-    try:
-        markets = get_market_data()
-        print(f"Market data: {len(markets)} coins fetched")
-        if not markets:
-            send_text("⚠️ ไม่สามารถดึงข้อมูลราคาคริปโตได้")
-            return
-
-        signals = {}
-        for coin in COINS:
-            try:
-                prices = get_hourly_prices(coin['id'])
-                signals[coin['id']] = get_signal(prices)
-                print(f"  {coin['symbol']}: RSI={calc_rsi(prices):.1f} signal={signals[coin['id']]['text']}")
-            except Exception:
-                traceback.print_exc()
-                signals[coin['id']] = {'text': '🟡 รอดูก่อน', 'detail': 'ดึงข้อมูลไม่ได้', 'color': '#f39c12'}
             time.sleep(0.5)
+        except Exception:
+            traceback.print_exc()
 
-        send_flex(build_carousel(markets, signals))
+    # ── Step 2: Look for new buy opportunities ────────────────────────────────
+    open_count    = len(state['positions'])
+    thb_balance   = get_free_thb(exchange)  # Refresh after any sells
+    tradeable_thb = thb_balance * (1 - RESERVE_PCT)
 
+    print(f"\n=== Scanning for buys | THB available: {tradeable_thb:.0f}"
+          f" | positions: {open_count}/{MAX_POSITIONS} ===")
+
+    for symbol in TRADE_PAIRS:
+        if open_count >= MAX_POSITIONS:
+            print(f"  Max positions ({MAX_POSITIONS}) reached — skipping scan")
+            break
+        if symbol in state['positions']:
+            continue  # Already holding this coin
+
+        try:
+            prices = get_closing_prices(exchange, symbol)
+            signal = get_signal(prices)
+            rsi    = round(calc_rsi(prices), 1)
+            print(f"  {symbol}: RSI={rsi} signal={signal}")
+
+            if signal in ('BUY', 'BUY_STRONG'):
+                thb_to_use = tradeable_thb * MAX_POS_PCT
+                thb_to_use = max(thb_to_use, MIN_ORDER_THB)
+
+                if thb_to_use > tradeable_thb:
+                    print(f"  Not enough THB for {symbol} (need {thb_to_use:.0f})")
+                    continue
+
+                order       = place_market_buy(exchange, symbol, thb_to_use)
+                filled_qty  = float(order.get('filled') or order.get('amount') or 0)
+                avg_price   = float(order.get('average') or 0)
+
+                if filled_qty <= 0 or avg_price <= 0:
+                    # Fallback: estimate from current price
+                    avg_price  = get_current_price(exchange, symbol)
+                    filled_qty = thb_to_use / avg_price
+
+                invested_thb = filled_qty * avg_price
+
+                state['positions'][symbol] = {
+                    'quantity':    filled_qty,
+                    'entry_price': avg_price,
+                    'entry_time':  datetime.now(timezone.utc).isoformat(),
+                    'invested_thb': invested_thb,
+                }
+
+                notify_buy(symbol, avg_price, filled_qty, invested_thb, rsi, signal)
+                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ {avg_price:.2f}"
+                      f" ({invested_thb:.0f} THB)")
+
+                tradeable_thb -= invested_thb
+                open_count    += 1
+
+            time.sleep(1.0)
+        except Exception:
+            traceback.print_exc()
+
+    # ── Step 3: Hourly portfolio summary ─────────────────────────────────────
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    if now_ts - state.get('last_summary_ts', 0) >= SUMMARY_EVERY:
+        final_thb   = get_free_thb(exchange)
+        # Re-add coin values for summary total
+        coin_total  = 0.0
+        for symbol, pos in state['positions'].items():
+            try:
+                price      = get_current_price(exchange, symbol)
+                coin_total += float(pos['quantity']) * price
+            except Exception:
+                pass
+        total_value = final_thb + coin_total
+        notify_summary(final_thb, total_value, pnl_map, state.get('initial_thb', total_value))
+        state['last_summary_ts'] = now_ts
+
+    save_state(state)
+    print(f"\nDone. THB balance: {get_free_thb(exchange):.0f}"
+          f" | Positions: {list(state['positions'].keys())}")
+
+
+if __name__ == '__main__':
+    try:
+        run()
     except Exception as e:
-        traceback.print_exc()   # full traceback in GitHub Actions log
-        send_text(f"⚠️ Error: {str(e)[:100]}")
-
-
-if __name__ == "__main__":
-    run_check()
+        traceback.print_exc()
+        notify_error(str(e))
