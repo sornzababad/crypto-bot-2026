@@ -1,0 +1,3 @@
+# Always keep main branch version of state.json when merging PRs
+# (bot updates this file every 15 min — prevents repeated conflicts)
+state.json merge=ours
