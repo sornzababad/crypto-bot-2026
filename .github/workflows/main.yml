@@ -1,28 +1,50 @@
-name: Crypto-Bot-Hourly
+name: Crypto-Trading-Bot
 
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '*/15 * * * *'   # Every 15 minutes (24/7, free on GitHub Actions)
+  workflow_dispatch:           # Manual trigger from GitHub UI
 
 jobs:
-  build:
+  trade:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write          # Required to commit state.json back to repo
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          pip install requests
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
 
-      - name: Run bot logic
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run trading bot
         env:
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          BINANCE_API_KEY:    ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+          LINE_TOKEN:         ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
         run: python main.py
+
+      - name: Save state to repo
+        run: |
+          git config user.email "trading-bot@github-actions.com"
+          git config user.name  "Trading Bot"
+          git pull --rebase origin ${{ github.ref_name }} || true
+          git add state.json
+          git diff --staged --quiet || git commit -m "bot: state update $(date -u +'%H:%M UTC')"
+          git push || true
