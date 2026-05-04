@@ -7,10 +7,10 @@ RESERVE_PCT      = 0.10    # Always keep 10% of balance in THB (never trade)
 MAX_POSITIONS    = 4       # Hold at most 4 coins at once
 
 # ─── Signal Thresholds (RSI-14) ───────────────────────────────────────────────
-RSI_BUY_STRONG   = 35      # RSI <= 35 → strong buy regardless of EMA
-RSI_BUY_NORMAL   = 48      # RSI <= 48 + uptrend (EMA12 > EMA26) → buy
-RSI_SELL_NORMAL  = 55      # RSI >= 55 + downtrend → sell
-RSI_SELL_STRONG  = 68      # RSI >= 68 → strong sell regardless of EMA
+RSI_BUY_STRONG   = 38      # RSI <= 38 → strong buy regardless of EMA
+RSI_BUY_NORMAL   = 50      # RSI <= 50 + uptrend (EMA12 > EMA26) → buy
+RSI_SELL_NORMAL  = 52      # RSI >= 52 + downtrend → sell
+RSI_SELL_STRONG  = 62      # RSI >= 62 → strong sell regardless of EMA
 
 # ─── OHLCV Settings ───────────────────────────────────────────────────────────
 KLINE_TIMEFRAME  = '1h'    # Hourly candles
