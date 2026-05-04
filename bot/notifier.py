@@ -60,7 +60,8 @@ def notify_sell(symbol: str, price: float, quantity: float,
 
 
 def notify_summary(thb_balance: float, total_value: float,
-                   positions: dict, realized_pnl_thb: float):
+                   positions: dict, realized_pnl_thb: float,
+                   scan_results: list = None):
     sign  = '+' if realized_pnl_thb >= 0 else ''
     lines = [
         f"📊 สรุปพอร์ต — {_now_bkk()}",
@@ -70,12 +71,23 @@ def notify_summary(thb_balance: float, total_value: float,
         "",
     ]
     if positions:
+        lines.append("📌 ถือครอง:")
         for sym, pos in positions.items():
             p   = pos.get('pnl_pct', 0.0)
             s   = '+' if p >= 0 else ''
-            lines.append(f"• {sym.split('/')[0]}: {s}{p:.2f}%")
+            lines.append(f"  • {sym.split('/')[0]}: {s}{p:.2f}%")
+        lines.append("")
     else:
         lines.append("(ไม่มีเหรียญในพอร์ต — รอสัญญาณซื้อ)")
+        lines.append("")
+
+    if scan_results:
+        lines.append("🔍 RSI ล่าสุด:")
+        for sym, rsi, sig in scan_results[:8]:
+            coin = sym.split('/')[0]
+            tag  = f" ← {sig}" if sig not in ('HOLD', 'NEUTRAL') else ''
+            lines.append(f"  {coin}: {rsi}{tag}")
+
     _push("\n".join(lines))
 
 
