@@ -146,6 +146,8 @@ def get_coin_balance(coin: str) -> float:
 def place_market_buy(symbol: str, thb_amount: float) -> dict:
     price    = get_current_price(symbol)
     quantity = _round_qty(symbol, thb_amount / price)
+    if quantity * price < 300:
+        raise ValueError(f"Order value {quantity * price:.0f} THB below BinanceTH minimum 300 THB")
     return _post_private('/api/v1/order', {
         'symbol':   symbol.replace('/', ''),
         'side':     'BUY',

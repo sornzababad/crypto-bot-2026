@@ -6,7 +6,7 @@ COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
 VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average — stricter confirmation (was 1.2x)
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
 MAX_POS_PCT      = 0.40    # Max 40% of tradeable THB per coin (was 30%)
-MIN_ORDER_THB    = 200.0   # Minimum single order in THB
+MIN_ORDER_THB    = 350.0   # Minimum single order in THB (BinanceTH requires >300)
 RESERVE_PCT      = 0.05    # Keep 5% cash reserve    (was 10%)
 MAX_POSITIONS    = 5       # Hold at most 5 coins     (was 4)
 
