@@ -1,20 +1,28 @@
 """
 Crypto Trading Bot — BinanceTH
-Runs every 15 min via GitHub Actions (free).
+Runs continuously on a VPS, scanning every 30 minutes.
 
-Flow each run:
+Flow each cycle:
   1. Load state (open positions) from state.json
   2. Check each open position → sell if stop-loss or take-profit hit
   3. Scan all target pairs for buy signals → open new positions
-  4. Send hourly portfolio summary to LINE
-  5. Save updated state back to state.json (committed by workflow)
+  4. Send portfolio summary to LINE every 30 minutes
+  5. Save updated state back to state.json
+  6. Sleep 30 minutes, repeat
 """
 
 import json
+import logging
 import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
 
 from bot.config import (
     TAKE_PROFIT_PCT, STOP_LOSS_PCT,
@@ -34,8 +42,9 @@ from bot.notifier import (
     notify_buy, notify_sell, notify_summary, notify_error,
 )
 
-STATE_FILE    = Path('state.json')
-SUMMARY_EVERY = 1800  # seconds between portfolio summaries (every 30-min run)
+STATE_FILE     = Path('state.json')
+SUMMARY_EVERY  = 1800   # seconds between portfolio summaries
+LOOP_INTERVAL  = 1800   # seconds between full scan cycles (30 minutes)
 
 
 # ─── State helpers ────────────────────────────────────────────────────────────
@@ -191,8 +200,17 @@ def run():
 
 
 if __name__ == '__main__':
-    try:
-        run()
-    except Exception as e:
-        traceback.print_exc()
-        notify_error(str(e))
+    logging.info("=== Bot started. Cycle every %d min ===", LOOP_INTERVAL // 60)
+    notify_error("Bot เริ่มทำงานแล้ว ✅")  # startup ping to LINE
+    while True:
+        cycle_start = time.time()
+        try:
+            run()
+        except Exception as e:
+            traceback.print_exc()
+            notify_error(str(e))
+
+        elapsed = time.time() - cycle_start
+        sleep_for = max(0, LOOP_INTERVAL - elapsed)
+        logging.info("Cycle done in %.0fs. Sleeping %.0fs until next scan.", elapsed, sleep_for)
+        time.sleep(sleep_for)

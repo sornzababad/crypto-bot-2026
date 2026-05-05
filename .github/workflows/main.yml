@@ -1,9 +1,10 @@
 name: Crypto-Trading-Bot
 
 on:
-  schedule:
-    - cron: '0,30 * * * *'   # Every 30 min — Bangkok: :00 and :30 each hour
-  workflow_dispatch:           # Manual trigger from GitHub UI
+  # Cron disabled — bot now runs continuously on VPS (see setup-vps.sh)
+  # schedule:
+  #   - cron: '0,30 * * * *'
+  workflow_dispatch:           # Keep for manual one-off runs from GitHub UI
 
 jobs:
   trade:
