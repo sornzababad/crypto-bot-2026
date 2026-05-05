@@ -261,15 +261,25 @@ def run():
 SCAN_INTERVAL = 900   # 15 minutes between scans
 
 if __name__ == '__main__':
-    print("Bot starting — continuous mode (scan every 30 min)")
-    while True:
-        start = time.time()
+    import os
+    if os.getenv('GITHUB_ACTIONS'):
+        # One-shot mode for GitHub Actions — must exit so workflow can save state
         try:
             run()
         except Exception as e:
             traceback.print_exc()
             notify_error(str(e))
-        elapsed = time.time() - start
-        sleep_for = max(0, SCAN_INTERVAL - elapsed)
-        print(f"Sleeping {sleep_for:.0f}s until next scan...")
-        time.sleep(sleep_for)
+    else:
+        # Continuous mode for VPS
+        print("Bot starting — continuous mode (scan every 15 min)")
+        while True:
+            start = time.time()
+            try:
+                run()
+            except Exception as e:
+                traceback.print_exc()
+                notify_error(str(e))
+            elapsed = time.time() - start
+            sleep_for = max(0, SCAN_INTERVAL - elapsed)
+            print(f"Sleeping {sleep_for:.0f}s until next scan...")
+            time.sleep(sleep_for)

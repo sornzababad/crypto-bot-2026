@@ -18,7 +18,8 @@ def is_market_open() -> bool:
     now = datetime.now(timezone.utc)
     if now.weekday() >= 5:   # Saturday / Sunday
         return False
-    return 13 <= now.hour < 21
+    mins = now.hour * 60 + now.minute
+    return 13 * 60 + 30 <= mins < 20 * 60 + 5  # 13:30–20:05 UTC covers EDT + small buffer
 
 
 def scan_stocks(state: dict) -> list[dict]:
