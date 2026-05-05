@@ -1,0 +1,34 @@
+# systemd service — auto-starts the bot on boot and restarts if it crashes.
+#
+# Install:
+#   sudo cp crypto-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable crypto-bot
+#   sudo systemctl start crypto-bot
+#
+# Useful commands:
+#   sudo systemctl status crypto-bot       # check if running
+#   sudo journalctl -u crypto-bot -f       # live logs
+#   sudo systemctl restart crypto-bot      # restart manually
+#   sudo systemctl stop crypto-bot         # stop the bot
+
+[Unit]
+Description=Crypto Trading Bot (BinanceTH)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/crypto-bot-2026
+ExecStart=/home/ubuntu/crypto-bot-2026/venv/bin/python run_live.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Restart automatically even after a clean exit (keeps the loop alive)
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
