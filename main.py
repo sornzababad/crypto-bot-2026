@@ -190,9 +190,18 @@ def run():
     print(f"\nDone. THB: {get_free_thb():.0f} | Positions: {list(state['positions'].keys())}")
 
 
+SCAN_INTERVAL = 1800  # 30 minutes between scans
+
 if __name__ == '__main__':
-    try:
-        run()
-    except Exception as e:
-        traceback.print_exc()
-        notify_error(str(e))
+    print("Bot starting — continuous mode (scan every 30 min)")
+    while True:
+        start = time.time()
+        try:
+            run()
+        except Exception as e:
+            traceback.print_exc()
+            notify_error(str(e))
+        elapsed = time.time() - start
+        sleep_for = max(0, SCAN_INTERVAL - elapsed)
+        print(f"Sleeping {sleep_for:.0f}s until next scan...")
+        time.sleep(sleep_for)
