@@ -32,9 +32,8 @@ from bot.exchange import (
 )
 from bot.strategy import get_signal, calc_rsi
 from bot.notifier import (
-    notify_buy, notify_sell, notify_summary, notify_error, notify_stock_signal,
+    notify_buy, notify_sell, notify_summary, notify_error,
 )
-from bot.stocks import scan_stocks
 
 STATE_FILE    = Path('state.json')
 SUMMARY_EVERY = 1800  # seconds between portfolio summaries (every 30-min run)
@@ -249,10 +248,6 @@ def run():
         notify_summary(final_thb, total_value, pnl_map,
                        state.get('realized_pnl_thb', 0.0), scan_results)
         state['last_summary_ts'] = now_ts
-
-    # ── Step 4: US Stock scan (notify only) ───────────────────────────────────
-    for alert in scan_stocks(state):
-        notify_stock_signal(alert['symbol'], alert['price'], alert['signal'], alert['rsi'])
 
     save_state(state)
     print(f"\nDone. THB: {get_free_thb():.0f} | Positions: {list(state['positions'].keys())}")
