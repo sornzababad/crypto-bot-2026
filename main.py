@@ -49,14 +49,46 @@ def load_state() -> dict:
     return {'positions': {}, 'last_summary_ts': 0, 'initial_thb': 0, 'cooldowns': {}}
 
 
-def save_state(state: dict):
-    STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+def reconcile_positions(state: dict):
+    """Pull any coins held on exchange but missing from state back into tracking."""
+    try:
+        balances = get_balances()
+    except Exception:
+        return
+    for coin, qty in balances.items():
+        if coin == 'THB':
+            continue
+        symbol = f"{coin}/THB"
+        if symbol not in TRADE_PAIRS:
+            continue
+        if symbol in state['positions']:
+            continue
+        try:
+            price = get_current_price(symbol)
+            value = qty * price
+            if value < 100:   # ignore dust
+                continue
+            state['positions'][symbol] = {
+                'quantity':      qty,
+                'entry_price':   price,
+                'highest_price': price,
+                'entry_time':    datetime.now(timezone.utc).isoformat(),
+                'invested_thb':  value,
+                'reconciled':    True,
+            }
+            print(f"  Reconciled untracked position: {symbol} {qty:.6g} @ {price:.2f} ({value:.0f} THB)")
+        except Exception:
+            traceback.print_exc()
+
+
+
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def run():
     state = load_state()
+    reconcile_positions(state)
 
     thb_balance = get_free_thb()
     total_value = thb_balance
