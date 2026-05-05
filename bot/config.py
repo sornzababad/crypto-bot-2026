@@ -24,18 +24,13 @@ KLINE_LIMIT      = 200     # ~50 hours of data for reliable EMA/RSI
 
 # ─── Target Trading Pairs on BinanceTH (THB quote) ───────────────────────────
 TRADE_PAIRS = [
-    # All tradeable THB pairs on BinanceTH (auto-discovered 2026-05-05)
+    # Valid liquid pairs on BinanceTH
     'BTC/THB',
     'ETH/THB',
     'XRP/THB',
     'SOL/THB',
     'BNB/THB',
-    'ASTER/THB',
-    'ATH/THB',
-    'PLUME/THB',
     'VELO/THB',
-    'ZENT/THB',
-    # USDT/THB excluded — stablecoin
 ]
 
 # ─── US Stock Watchlist (notify-only, no auto-trade) ─────────────────────────
