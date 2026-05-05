@@ -38,9 +38,12 @@ def _headers() -> dict:
 
 
 def _unwrap(res: requests.Response) -> any:
-    """BinanceTH wraps all responses: {"code":0,"data":<payload>}"""
+    """BinanceTH wraps most responses: {"code":0,"data":<payload>}
+    but klines returns a raw list directly."""
     res.raise_for_status()
     body = res.json()
+    if isinstance(body, list):
+        return body
     if isinstance(body, dict) and body.get('code', 0) != 0:
         raise RuntimeError(f"BinanceTH API error {body.get('code')}: {body.get('msg')}")
     return body.get('data', body)

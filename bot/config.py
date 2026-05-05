@@ -20,22 +20,10 @@ KLINE_LIMIT      = 72      # 3 days of data
 
 # ─── Target Trading Pairs on BinanceTH (THB quote) ───────────────────────────
 TRADE_PAIRS = [
-    # Tier 1 — highest liquidity, most reliable signals
+    # Confirmed available on BinanceTH
     'BTC/THB',
     'ETH/THB',
     'XRP/THB',
     'SOL/THB',
     'BNB/THB',
-    # Tier 2 — high volatility, good for short-term gains
-    'DOGE/THB',
-    'ADA/THB',
-    'AVAX/THB',
-    'LINK/THB',
-    'DOT/THB',
-    # Tier 3 — smaller coins, higher risk/reward
-    'LTC/THB',
-    'TRX/THB',
-    'NEAR/THB',
-    'TON/THB',
-    'POL/THB',
 ]
