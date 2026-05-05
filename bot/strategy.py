@@ -1,4 +1,4 @@
-from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD, VOL_RATIO_MIN
+from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD, VOL_RATIO_MIN, RSI_SLOPE_BARS
 
 
 def calc_ema(prices: list[float], period: int) -> float:
@@ -52,12 +52,17 @@ def get_signal(prices: list[float], volumes: list[float] | None = None) -> str:
     uptrend = ema_f > ema_s
     vr      = vol_ratio(volumes) if volumes else 1.0
 
+    rsi_prev    = calc_rsi(prices[:-RSI_SLOPE_BARS]) if len(prices) > RSI_SLOPE_BARS + 15 else rsi
+    rsi_rising  = rsi > rsi_prev
+
     if uptrend:
         if rsi >= RSI_OVERBOUGHT:
             return 'HOLD'
         if vr < VOL_RATIO_MIN:
             return 'HOLD'          # signal not confirmed by volume
-        if rsi <= 40:
+        if not rsi_rising:
+            return 'HOLD'          # momentum fading — skip entry
+        if rsi <= 45:
             return 'BUY_STRONG'
         return 'BUY'
 

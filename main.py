@@ -216,7 +216,7 @@ def run():
     print(f"\nDone. THB: {get_free_thb():.0f} | Positions: {list(state['positions'].keys())}")
 
 
-SCAN_INTERVAL = 1800  # 30 minutes between scans
+SCAN_INTERVAL = 900   # 15 minutes between scans
 
 if __name__ == '__main__':
     print("Bot starting — continuous mode (scan every 30 min)")
