@@ -91,5 +91,20 @@ def notify_summary(thb_balance: float, total_value: float,
     _push("\n".join(lines))
 
 
+def notify_stock_signal(symbol: str, price: float, signal: str, rsi: float):
+    if 'BUY' in signal:
+        icon, action = '📈', 'สัญญาณซื้อ'
+    else:
+        icon, action = '📉', 'สัญญาณขาย'
+    strength = ' (แรง)' if 'STRONG' in signal else ''
+    text = (
+        f"{icon} หุ้น US: {symbol}\n"
+        f"ราคา: ${price:,.2f}\n"
+        f"{action}{strength} — RSI {rsi:.0f}\n"
+        f"⏰ {_now_bkk()}"
+    )
+    _push(text)
+
+
 def notify_error(message: str):
     _push(f"⚠️ Bot Error\n{message[:300]}\n{_now_bkk()}")

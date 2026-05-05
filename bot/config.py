@@ -37,3 +37,25 @@ TRADE_PAIRS = [
     'ZENT/THB',
     # USDT/THB excluded — stablecoin
 ]
+
+# ─── US Stock Watchlist (notify-only, no auto-trade) ─────────────────────────
+STOCK_WATCHLIST = [
+    # Tech
+    'AAPL', 'NVDA', 'MSFT', 'GOOGL', 'META', 'TSLA', 'AMZN', 'AMD',
+    'INTC', 'QCOM', 'AVGO', 'CRM', 'ORCL', 'ADBE', 'NFLX', 'UBER',
+    'PYPL', 'PLTR', 'COIN', 'ARM',
+    # AI / Semiconductor
+    'SMCI', 'AI', 'MSTR', 'ANET', 'MRVL', 'ASML',
+    # Healthcare
+    'LLY', 'JNJ', 'ABBV', 'UNH', 'PFE', 'MRK', 'AMGN', 'GILD', 'ISRG', 'REGN',
+    # Energy / Power
+    'NEE', 'CEG', 'VST', 'XOM', 'CVX', 'COP', 'OXY', 'FSLR', 'ENPH', 'SLB',
+    # Consumer
+    'COST', 'WMT', 'MCD', 'SBUX', 'NKE', 'HD', 'TGT', 'CMG', 'BKNG', 'ABNB',
+    # Finance
+    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'BRK-B', 'BLK',
+    # Industrial
+    'GE', 'BA', 'CAT', 'HON', 'LMT', 'RTX', 'UPS', 'FDX',
+    # ETF
+    'SPY', 'QQQ', 'SOXX', 'ARKK', 'SCHD', 'VOO',
+]
