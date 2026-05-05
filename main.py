@@ -23,6 +23,7 @@ from bot.config import (
 )
 from bot.exchange import (
     get_candles,
+    get_balances,
     get_free_thb,
     get_coin_balance,
     get_current_price,
@@ -47,6 +48,10 @@ def load_state() -> dict:
         except Exception:
             pass
     return {'positions': {}, 'last_summary_ts': 0, 'initial_thb': 0, 'cooldowns': {}}
+
+
+def save_state(state: dict):
+    STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
 
 
 def reconcile_positions(state: dict):
