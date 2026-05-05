@@ -1,7 +1,7 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-TAKE_PROFIT_PCT  = 0.060   # Sell when +6.0% profit (was 4%)
-STOP_LOSS_PCT    = 0.030   # Initial hard stop -3.0% (was 2.5% — more room to breathe)
-TRAIL_PCT        = 0.018   # Trailing stop 1.8% below peak (tighter to lock gains)
+TAKE_PROFIT_PCT  = 0.035   # Sell when +3.5% profit (was 6% — more realistic)
+STOP_LOSS_PCT    = 0.030   # Initial hard stop -3.0%
+TRAIL_PCT        = 0.015   # Trailing stop 1.5% below peak (was 1.8% — lock gains faster)
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
 VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average — stricter confirmation (was 1.2x)
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
