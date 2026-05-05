@@ -1,4 +1,4 @@
-from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD
+from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD, VOL_RATIO_MIN
 
 
 def calc_ema(prices: list[float], period: int) -> float:
@@ -29,14 +29,17 @@ def calc_rsi(prices: list[float], period: int = 14) -> float:
     return 100.0 - (100.0 / (1.0 + ag / al))
 
 
-def get_signal(prices: list[float]) -> str:
-    """
-    EMA State-primary strategy with RSI guards.
+def vol_ratio(volumes: list[float]) -> float:
+    """Current candle volume vs average of prior 20 candles."""
+    if len(volumes) < 2:
+        return 1.0
+    avg = sum(volumes[-21:-1]) / min(len(volumes) - 1, 20)
+    return volumes[-1] / avg if avg > 0 else 1.0
 
-    Logic:
-      - EMA_FAST > EMA_SLOW  →  uptrend  →  BUY  (unless RSI overbought)
-      - EMA_FAST < EMA_SLOW  →  downtrend →  SELL (unless RSI oversold)
-      - RSI guards only block entries in extreme conditions to avoid chasing
+
+def get_signal(prices: list[float], volumes: list[float] | None = None) -> str:
+    """
+    EMA crossover strategy with RSI guards and volume confirmation.
 
     Returns: 'BUY_STRONG' | 'BUY' | 'HOLD' | 'SELL' | 'SELL_STRONG'
     """
@@ -47,17 +50,20 @@ def get_signal(prices: list[float]) -> str:
     ema_f   = calc_ema(prices, EMA_FAST)
     ema_s   = calc_ema(prices, EMA_SLOW)
     uptrend = ema_f > ema_s
+    vr      = vol_ratio(volumes) if volumes else 1.0
 
     if uptrend:
         if rsi >= RSI_OVERBOUGHT:
-            return 'HOLD'          # trending up but too hot — wait for cooldown
+            return 'HOLD'
+        if vr < VOL_RATIO_MIN:
+            return 'HOLD'          # signal not confirmed by volume
         if rsi <= 40:
-            return 'BUY_STRONG'    # uptrend + deeply oversold = strong entry
-        return 'BUY'               # uptrend — standard entry
+            return 'BUY_STRONG'
+        return 'BUY'
 
-    else:  # downtrend
+    else:
         if rsi <= RSI_OVERSOLD:
-            return 'HOLD'          # trending down but too cold — bounce risk
+            return 'HOLD'
         if rsi >= 65:
-            return 'SELL_STRONG'   # downtrend + overbought = strong exit
-        return 'SELL'              # downtrend — standard exit
+            return 'SELL_STRONG'
+        return 'SELL'

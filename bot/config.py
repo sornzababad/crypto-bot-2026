@@ -1,6 +1,9 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-TAKE_PROFIT_PCT  = 0.040   # Sell when +4.0% profit  (was 2.5%)
-STOP_LOSS_PCT    = 0.025   # Sell when -2.5% loss    (was 3.0%)
+TAKE_PROFIT_PCT  = 0.040   # Sell when +4.0% profit
+STOP_LOSS_PCT    = 0.025   # Initial hard stop -2.5% (fallback if no peak yet)
+TRAIL_PCT        = 0.020   # Trailing stop: SL trails 2% below highest price since entry
+COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
+VOL_RATIO_MIN    = 1.2     # Current candle volume must be >= 1.2x recent avg to confirm buy
 MAX_POS_PCT      = 0.30    # Max 30% of tradeable THB per coin (was 25%)
 MIN_ORDER_THB    = 200.0   # Minimum single order in THB
 RESERVE_PCT      = 0.05    # Keep 5% cash reserve    (was 10%)

@@ -17,12 +17,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bot.config import (
-    TAKE_PROFIT_PCT, STOP_LOSS_PCT,
+    TAKE_PROFIT_PCT, STOP_LOSS_PCT, TRAIL_PCT, COOLDOWN_HOURS,
     MAX_POS_PCT, MIN_ORDER_THB, RESERVE_PCT,
     MAX_POSITIONS, TRADE_PAIRS,
 )
 from bot.exchange import (
-    get_closing_prices,
+    get_candles,
     get_free_thb,
     get_coin_balance,
     get_current_price,
@@ -46,7 +46,7 @@ def load_state() -> dict:
             return json.loads(STATE_FILE.read_text())
         except Exception:
             pass
-    return {'positions': {}, 'last_summary_ts': 0, 'initial_thb': 0}
+    return {'positions': {}, 'last_summary_ts': 0, 'initial_thb': 0, 'cooldowns': {}}
 
 
 def save_state(state: dict):
@@ -79,15 +79,30 @@ def run():
             print(f"  {symbol}: entry={entry_price:.2f} now={current_price:.2f}"
                   f" pnl={pnl_pct:+.2f}%")
 
+            # update trailing high
+            highest = max(current_price, float(pos.get('highest_price', entry_price)))
+            pos['highest_price'] = highest
+            trail_sl  = highest * (1 - TRAIL_PCT)
+            hard_sl   = entry_price * (1 - STOP_LOSS_PCT)
+            active_sl = max(trail_sl, hard_sl)  # whichever is higher protects more
+
             should_sell = False
             reason      = ''
+            is_stop_loss = False
 
             if pnl_pct >= TAKE_PROFIT_PCT * 100:
                 should_sell = True
                 reason      = f'Take Profit +{pnl_pct:.2f}%'
-            elif pnl_pct <= -(STOP_LOSS_PCT * 100):
-                should_sell = True
-                reason      = f'Stop Loss {pnl_pct:.2f}%'
+            elif current_price <= active_sl:
+                should_sell  = True
+                is_stop_loss = True
+                if current_price <= hard_sl:
+                    reason = f'Hard Stop Loss {pnl_pct:.2f}%'
+                else:
+                    reason = f'Trailing Stop {pnl_pct:.2f}% (peak {highest:,.0f})'
+
+            print(f"  {symbol}: entry={entry_price:.2f} now={current_price:.2f}"
+                  f" peak={highest:.2f} sl={active_sl:.2f} pnl={pnl_pct:+.2f}%")
 
             if should_sell:
                 actual_qty = get_coin_balance(coin)
@@ -101,6 +116,8 @@ def run():
                     notify_sell(symbol, filled_price, actual_qty,
                                 thb_returned, reason, pnl_pct)
                     print(f"  SOLD {symbol}: {reason}")
+                    if is_stop_loss:
+                        state.setdefault('cooldowns', {})[symbol] = int(datetime.now(timezone.utc).timestamp())
                 else:
                     print(f"  {symbol}: no balance found — removing from state")
                 del state['positions'][symbol]
@@ -127,9 +144,17 @@ def run():
         if symbol in state['positions']:
             continue
 
+        # skip cooldown period after a stop loss
+        now_ts    = int(datetime.now(timezone.utc).timestamp())
+        cooled_at = state.get('cooldowns', {}).get(symbol, 0)
+        if now_ts - cooled_at < COOLDOWN_HOURS * 3600:
+            remaining = int((COOLDOWN_HOURS * 3600 - (now_ts - cooled_at)) / 60)
+            print(f"  {symbol}: cooldown {remaining}min remaining")
+            continue
+
         try:
-            prices = get_closing_prices(symbol)
-            signal = get_signal(prices)
+            prices, volumes = get_candles(symbol)
+            signal = get_signal(prices, volumes)
             rsi    = round(calc_rsi(prices), 1)
             print(f"  {symbol}: RSI={rsi} signal={signal}")
             scan_results.append((symbol, rsi, signal))
@@ -155,10 +180,11 @@ def run():
                 invested_thb = filled_qty * avg_price
 
                 state['positions'][symbol] = {
-                    'quantity':     filled_qty,
-                    'entry_price':  avg_price,
-                    'entry_time':   datetime.now(timezone.utc).isoformat(),
-                    'invested_thb': invested_thb,
+                    'quantity':      filled_qty,
+                    'entry_price':   avg_price,
+                    'highest_price': avg_price,
+                    'entry_time':    datetime.now(timezone.utc).isoformat(),
+                    'invested_thb':  invested_thb,
                 }
 
                 notify_buy(symbol, avg_price, filled_qty, invested_thb, rsi, signal)
@@ -172,7 +198,7 @@ def run():
             traceback.print_exc()
 
     # ── Step 3: Hourly portfolio summary ──────────────────────────────────────
-    now_ts = int(datetime.now(timezone.utc).timestamp())
+    now_ts = int(datetime.now(timezone.utc).timestamp())  # noqa: F841 (reuse ok)
     if now_ts - state.get('last_summary_ts', 0) >= SUMMARY_EVERY:
         final_thb  = get_free_thb()
         coin_total = 0.0
