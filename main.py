@@ -65,7 +65,7 @@ def reconcile_positions(state: dict):
         try:
             price = get_current_price(symbol)
             value = qty * price
-            if value < 1.0:   # ignore dust (< $1)
+            if value < MIN_ORDER_USDT * 2:   # ignore dust
                 continue
             state['positions'][symbol] = {
                 'quantity':      qty,
