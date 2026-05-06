@@ -1,6 +1,7 @@
 import os
 import requests
 from datetime import datetime, timezone, timedelta
+from bot.config import TAKE_PROFIT_PCT, STOP_LOSS_PCT
 
 LINE_TOKEN = os.getenv('LINE_TOKEN', '')
 USER_ID    = os.getenv('LINE_USER_ID', '')
@@ -36,7 +37,7 @@ def notify_buy(symbol: str, price: float, quantity: float,
         f"จำนวน: {quantity:.6g} {coin}\n"
         f"ลงทุน: ${invested_usdt:,.2f} USDT\n"
         f"สัญญาณ: {signal} (RSI {rsi:.0f})\n"
-        f"TP: ${price*(1+0.035):,.4f}  |  SL: ${price*(1-0.030):,.4f}\n"
+        f"TP: ${price*(1+TAKE_PROFIT_PCT):,.4f}  |  SL: ${price*(1-STOP_LOSS_PCT):,.4f}\n"
         f"⏰ {_now_bkk()}"
     )
     _push(text)

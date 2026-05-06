@@ -191,10 +191,11 @@ def run():
                 order      = place_market_buy(symbol, usdt_to_use)
                 fills      = order.get('fills', [])
                 filled_qty = float(order.get('executedQty') or sum(float(f['qty']) for f in fills) or 0)
-                avg_price  = (
-                    float(order.get('cummulativeQuoteQty', 0)) / filled_qty
-                    if filled_qty > 0 else get_current_price(symbol)
-                )
+                cum_quote  = float(order.get('cummulativeQuoteQty', 0))
+                if filled_qty > 0 and cum_quote > 0:
+                    avg_price = cum_quote / filled_qty
+                else:
+                    avg_price = get_current_price(symbol)
                 if filled_qty <= 0:
                     filled_qty = usdt_to_use / avg_price
 
