@@ -139,19 +139,24 @@ def get_free_thb() -> float:
     return get_balances().get('THB', 0.0)
 
 
+def get_free_usdt() -> float:
+    return get_balances().get('USDT', 0.0)
+
+
 def get_coin_balance(coin: str) -> float:
     return get_balances().get(coin, 0.0)
 
 
-def place_market_buy(symbol: str, thb_amount: float) -> dict:
+def place_market_buy(symbol: str, usdt_amount: float) -> dict:
+    from bot.config import MIN_ORDER_USDT
     price    = get_current_price(symbol)
     step     = _step_size(symbol.replace('/', ''))
-    quantity = _round_qty(symbol, thb_amount / price)
-    # bump up by one step if rounded value falls below BinanceTH 300 THB minimum
-    if quantity * price < 300:
+    quantity = _round_qty(symbol, usdt_amount / price)
+    # bump up by one step if rounded value falls below minimum
+    if quantity * price < MIN_ORDER_USDT:
         quantity = round(quantity + step, 10)
-    if quantity * price < 300:
-        raise ValueError(f"Order value {quantity * price:.0f} THB below 300 THB minimum even after bump")
+    if quantity * price < MIN_ORDER_USDT:
+        raise ValueError(f"Order value ${quantity * price:.2f} below ${MIN_ORDER_USDT} minimum after bump")
     return _post_private('/api/v1/order', {
         'symbol':   symbol.replace('/', ''),
         'side':     'BUY',

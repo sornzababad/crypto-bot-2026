@@ -1,56 +1,47 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-TAKE_PROFIT_PCT  = 0.035   # Sell when +3.5% profit (was 6% — more realistic)
+TAKE_PROFIT_PCT  = 0.035   # Sell when +3.5% profit
 STOP_LOSS_PCT    = 0.030   # Initial hard stop -3.0%
-TRAIL_PCT        = 0.015   # Trailing stop 1.5% below peak (was 1.8% — lock gains faster)
+TRAIL_PCT        = 0.015   # Trailing stop 1.5% below peak
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
-VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average — stricter confirmation (was 1.2x)
+VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average to confirm buy
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
-MAX_POS_PCT      = 0.40    # Max 40% of tradeable THB per coin (was 30%)
-MIN_ORDER_THB    = 350.0   # Minimum single order in THB (BinanceTH requires >300)
-RESERVE_PCT      = 0.05    # Keep 5% cash reserve    (was 10%)
-MAX_POSITIONS    = 5       # Hold at most 5 coins     (was 4)
+MAX_POS_PCT      = 0.15    # Max 15% of tradeable USDT per coin (10 positions)
+MIN_ORDER_USDT   = 5.0     # Minimum single order in USDT
+RESERVE_PCT      = 0.05    # Keep 5% USDT reserve
+MAX_POSITIONS    = 10      # Hold at most 10 coins
 
 # ─── EMA Settings ─────────────────────────────────────────────────────────────
-EMA_FAST         = 9       # Fast EMA — more reactive (was 12)
-EMA_SLOW         = 21      # Slow EMA — trend baseline (was 26)
+EMA_FAST         = 9       # Fast EMA
+EMA_SLOW         = 21      # Slow EMA
 
-# ─── RSI Guards (prevent entry in extreme conditions only) ────────────────────
-RSI_OVERBOUGHT   = 72      # Don't BUY if RSI >= 72 (too hot)
-RSI_OVERSOLD     = 28      # Don't SELL if RSI <= 28 (too cold, bounce risk)
+# ─── RSI Guards ───────────────────────────────────────────────────────────────
+RSI_OVERBOUGHT   = 72      # Don't BUY if RSI >= 72
+RSI_OVERSOLD     = 28      # Don't SELL if RSI <= 28
 
 # ─── OHLCV Settings ───────────────────────────────────────────────────────────
-KLINE_TIMEFRAME  = '15m'   # 15-minute candles (was 1h — faster signals)
+KLINE_TIMEFRAME  = '15m'   # 15-minute candles
 KLINE_LIMIT      = 200     # ~50 hours of data for reliable EMA/RSI
 
-# ─── Target Trading Pairs on BinanceTH (THB quote) ───────────────────────────
+# ─── Target Trading Pairs on BinanceTH (USDT quote) ──────────────────────────
 TRADE_PAIRS = [
-    # Valid liquid pairs on BinanceTH
-    'BTC/THB',
-    'ETH/THB',
-    'XRP/THB',
-    'SOL/THB',
-    'BNB/THB',
-    'VELO/THB',
-]
-
-# ─── US Stock Watchlist (notify-only, no auto-trade) ─────────────────────────
-STOCK_WATCHLIST = [
-    # Tech
-    'AAPL', 'NVDA', 'MSFT', 'GOOGL', 'META', 'TSLA', 'AMZN', 'AMD',
-    'INTC', 'QCOM', 'AVGO', 'CRM', 'ORCL', 'ADBE', 'NFLX', 'UBER',
-    'PYPL', 'PLTR', 'COIN', 'ARM',
-    # AI / Semiconductor
-    'SMCI', 'AI', 'MSTR', 'ANET', 'MRVL', 'ASML',
-    # Healthcare
-    'LLY', 'JNJ', 'ABBV', 'UNH', 'PFE', 'MRK', 'AMGN', 'GILD', 'ISRG', 'REGN',
-    # Energy / Power
-    'NEE', 'CEG', 'VST', 'XOM', 'CVX', 'COP', 'OXY', 'FSLR', 'ENPH', 'SLB',
-    # Consumer
-    'COST', 'WMT', 'MCD', 'SBUX', 'NKE', 'HD', 'TGT', 'CMG', 'BKNG', 'ABNB',
-    # Finance
-    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'BRK-B', 'BLK',
-    # Industrial
-    'GE', 'BA', 'CAT', 'HON', 'LMT', 'RTX', 'UPS', 'FDX',
-    # ETF
-    'SPY', 'QQQ', 'SOXX', 'ARKK', 'SCHD', 'VOO',
+    # Big cap — reliable signals, high volume
+    'BTC/USDT',
+    'ETH/USDT',
+    'SOL/USDT',
+    'BNB/USDT',
+    'XRP/USDT',
+    # High volatility — good for daily trading
+    'DOGE/USDT',
+    'ADA/USDT',
+    'AVAX/USDT',
+    'LINK/USDT',
+    'DOT/USDT',
+    # Trending — high momentum
+    'TON/USDT',
+    'SUI/USDT',
+    'NEAR/USDT',
+    'APT/USDT',
+    # High risk/reward — volatile meme coins
+    'PEPE/USDT',
+    'SHIB/USDT',
 ]
