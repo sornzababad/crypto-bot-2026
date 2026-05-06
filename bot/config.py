@@ -5,9 +5,9 @@ TRAIL_PCT        = 0.025   # Trailing stop 2.5% below peak
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
 VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average to confirm buy
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
-MAX_POS_PCT        = 0.10  # Max 10% per coin (BUY signal)
-MAX_POS_PCT_STRONG = 0.20  # Max 20% per coin (BUY_STRONG signal)
-MAX_POS_PCT_MEME   = 0.08  # Max 8% for meme coins (PEPE/SHIB/DOGE)
+MAX_POS_PCT        = 0.12  # Max 12% per coin (BUY signal) — ~8 BUYs = full deploy
+MAX_POS_PCT_STRONG = 0.25  # Max 25% per coin (BUY_STRONG signal)
+MAX_POS_PCT_MEME   = 0.10  # Max 10% for meme coins (PEPE/SHIB/DOGE)
 MEME_PAIRS         = {'PEPE/USDT', 'SHIB/USDT', 'DOGE/USDT'}
 MIN_ORDER_USDT     = 5.0   # Minimum single order in USDT
 RESERVE_PCT        = 0.05  # Keep 5% USDT reserve

@@ -156,13 +156,20 @@ def run():
             if should_sell:
                 actual_qty = get_coin_balance(coin)
                 if actual_qty > 0:
-                    order          = place_market_sell(symbol, actual_qty)
-                    filled_price   = float(order.get('fills', [{}])[0].get('price', 0) or current_price)
-                    usdt_returned  = actual_qty * filled_price
+                    order      = place_market_sell(symbol, actual_qty)
+                    fills      = order.get('fills', [])
+                    cum_quote  = float(order.get('cummulativeQuoteQty', 0))
+                    filled_qty = float(order.get('executedQty') or sum(float(f['qty']) for f in fills) or actual_qty)
+                    if cum_quote > 0:
+                        usdt_returned = cum_quote
+                        filled_price  = cum_quote / filled_qty if filled_qty > 0 else current_price
+                    else:
+                        filled_price  = current_price
+                        usdt_returned = filled_qty * filled_price
                     invested_usdt  = float(pos.get('invested_usdt', usdt_returned))
                     realized_usdt  = usdt_returned - invested_usdt
                     state['realized_pnl_usdt'] = state.get('realized_pnl_usdt', 0) + realized_usdt
-                    notify_sell(symbol, filled_price, actual_qty, usdt_returned, reason, pnl_pct)
+                    notify_sell(symbol, filled_price, filled_qty, usdt_returned, reason, pnl_pct)
                     print(f"  SOLD {symbol}: {reason}")
                     if is_stop_loss:
                         state.setdefault('cooldowns', {})[symbol] = int(datetime.now(timezone.utc).timestamp())
@@ -176,9 +183,10 @@ def run():
             traceback.print_exc()
 
     # ── Step 2: Look for new buy opportunities ────────────────────────────────
-    open_count       = len(state['positions'])
-    usdt_balance     = get_free_usdt()
-    tradeable_usdt   = usdt_balance * (1 - RESERVE_PCT)
+    open_count         = len(state['positions'])
+    usdt_balance       = get_free_usdt()
+    tradeable_usdt     = usdt_balance * (1 - RESERVE_PCT)
+    original_tradeable = tradeable_usdt  # snapshot for position sizing (prevents geometric decay)
 
     print(f"\n=== Scanning for buys | USDT: ${tradeable_usdt:.2f}"
           f" | positions: {open_count}/{MAX_POSITIONS} ===")
@@ -221,10 +229,13 @@ def run():
                     pos_pct = MAX_POS_PCT_STRONG
                 else:
                     pos_pct = MAX_POS_PCT
-                usdt_to_use = max(tradeable_usdt * pos_pct, MIN_ORDER_USDT)
+                # Size from ORIGINAL budget (not remaining) — avoids geometric decay
+                usdt_to_use = max(original_tradeable * pos_pct, MIN_ORDER_USDT)
+                # But cap at actually-available cash so we don't oversize
+                usdt_to_use = min(usdt_to_use, tradeable_usdt)
 
-                if usdt_to_use > tradeable_usdt:
-                    print(f"  Not enough USDT for {symbol}")
+                if usdt_to_use < MIN_ORDER_USDT:
+                    print(f"  Not enough USDT for {symbol} (${tradeable_usdt:.2f} left)")
                     continue
 
                 order      = place_market_buy(symbol, usdt_to_use)
