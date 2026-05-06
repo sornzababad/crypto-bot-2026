@@ -55,6 +55,13 @@ def reconcile_positions(state: dict):
         balances = get_balances()
     except Exception:
         return
+
+    # Remove corrupted positions with entry_price <= 0
+    bad_syms = [s for s, p in state['positions'].items() if float(p.get('entry_price', 1)) <= 0]
+    for s in bad_syms:
+        del state['positions'][s]
+        print(f"  Removed corrupted position: {s}")
+
     for coin, qty in balances.items():
         if coin in ('THB', 'USDT'):
             continue
@@ -99,6 +106,14 @@ def run():
         try:
             qty           = float(pos['quantity'])
             entry_price   = float(pos['entry_price'])
+
+            # Skip corrupted positions (entry_price = 0 from old bugs)
+            if entry_price <= 0:
+                print(f"  {symbol}: corrupted (entry_price={entry_price}) — removing")
+                del state['positions'][symbol]
+                pnl_map.pop(symbol, None)
+                continue
+
             current_price = get_current_price(symbol)
             coin_value    = qty * current_price
             total_value  += coin_value
@@ -118,8 +133,11 @@ def run():
             reason       = ''
             is_stop_loss = False
 
-            entry_time = datetime.fromisoformat(pos.get('entry_time', datetime.now(timezone.utc).isoformat()))
-            hours_held = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
+            try:
+                entry_time = datetime.fromisoformat(pos.get('entry_time', datetime.now(timezone.utc).isoformat()))
+                hours_held = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
+            except Exception:
+                hours_held = 0
 
             if pnl_pct >= TAKE_PROFIT_PCT * 100:
                 should_sell = True
@@ -247,7 +265,9 @@ def run():
         coin_total = 0.0
         for symbol, pos in state['positions'].items():
             try:
-                coin_total += float(pos['quantity']) * get_current_price(symbol)
+                entry_price = float(pos.get('entry_price', 0))
+                if entry_price > 0:
+                    coin_total += float(pos['quantity']) * get_current_price(symbol)
             except Exception:
                 pass
         total_value = final_usdt + coin_total
