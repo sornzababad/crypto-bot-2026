@@ -182,11 +182,11 @@ def run():
         except Exception:
             traceback.print_exc()
 
-    # ── Step 2: Look for new buy opportunities ────────────────────────────────
+    # ── Step 2: Look for new buy opportunities + top-ups ─────────────────────
     open_count         = len(state['positions'])
     usdt_balance       = get_free_usdt()
     tradeable_usdt     = usdt_balance * (1 - RESERVE_PCT)
-    original_tradeable = tradeable_usdt  # snapshot for position sizing (prevents geometric decay)
+    original_tradeable = tradeable_usdt  # snapshot — avoids geometric decay
 
     print(f"\n=== Scanning for buys | USDT: ${tradeable_usdt:.2f}"
           f" | positions: {open_count}/{MAX_POSITIONS} ===")
@@ -198,25 +198,39 @@ def run():
         print("  ⚠️  BTC downtrend — pausing all altcoin buys this cycle")
 
     for symbol in TRADE_PAIRS:
-        if open_count >= MAX_POSITIONS:
-            print(f"  Max positions ({MAX_POSITIONS}) reached")
-            break
-        if symbol in state['positions']:
+        is_existing = symbol in state['positions']
+
+        # At max positions — skip new entries but still allow top-ups
+        if not is_existing and open_count >= MAX_POSITIONS:
             continue
+
+        # Top-up eligibility check
+        if is_existing:
+            pos = state['positions'][symbol]
+            if pos.get('top_up_count', 0) >= 1:
+                continue  # max 1 top-up per coin
+            pnl_now = pnl_map.get(symbol, {}).get('pnl_pct', 0)
+            if pnl_now < 1.0:
+                continue  # only add to winners (>+1%)
 
         now_ts    = int(datetime.now(timezone.utc).timestamp())
         cooled_at = state.get('cooldowns', {}).get(symbol, 0)
         if now_ts - cooled_at < COOLDOWN_HOURS * 3600:
             remaining = int((COOLDOWN_HOURS * 3600 - (now_ts - cooled_at)) / 60)
-            print(f"  {symbol}: cooldown {remaining}min remaining")
+            if not is_existing:
+                print(f"  {symbol}: cooldown {remaining}min remaining")
             continue
 
         try:
             prices, volumes = get_candles(symbol)
             signal = get_signal(prices, volumes)
             rsi    = round(calc_rsi(prices), 1)
-            print(f"  {symbol}: RSI={rsi} signal={signal}")
-            scan_results.append((symbol, rsi, signal))
+
+            if is_existing:
+                print(f"  {symbol}: top-up check RSI={rsi} signal={signal} pnl={pnl_now:+.2f}%")
+            else:
+                print(f"  {symbol}: RSI={rsi} signal={signal}")
+                scan_results.append((symbol, rsi, signal))
 
             if signal in ('BUY', 'BUY_STRONG'):
                 if not btc_bullish and symbol != 'BTC/USDT':
@@ -229,9 +243,12 @@ def run():
                     pos_pct = MAX_POS_PCT_STRONG
                 else:
                     pos_pct = MAX_POS_PCT
-                # Size from ORIGINAL budget (not remaining) — avoids geometric decay
+
+                # Top-ups are 50% of normal size — careful with existing exposure
+                if is_existing:
+                    pos_pct = pos_pct * 0.5
+
                 usdt_to_use = max(original_tradeable * pos_pct, MIN_ORDER_USDT)
-                # But cap at actually-available cash so we don't oversize
                 usdt_to_use = min(usdt_to_use, tradeable_usdt)
 
                 if usdt_to_use < MIN_ORDER_USDT:
@@ -251,19 +268,36 @@ def run():
 
                 invested_usdt = filled_qty * avg_price
 
-                state['positions'][symbol] = {
-                    'quantity':      filled_qty,
-                    'entry_price':   avg_price,
-                    'highest_price': avg_price,
-                    'entry_time':    datetime.now(timezone.utc).isoformat(),
-                    'invested_usdt': invested_usdt,
-                }
-
-                notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, signal)
-                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ {avg_price:.4f} (${invested_usdt:.2f})")
+                if is_existing:
+                    pos          = state['positions'][symbol]
+                    old_qty      = float(pos['quantity'])
+                    old_invested = float(pos['invested_usdt'])
+                    new_qty      = old_qty + filled_qty
+                    new_invested = old_invested + invested_usdt
+                    new_entry    = new_invested / new_qty
+                    state['positions'][symbol].update({
+                        'quantity':      new_qty,
+                        'entry_price':   new_entry,
+                        'highest_price': max(avg_price, float(pos.get('highest_price', avg_price))),
+                        'invested_usdt': new_invested,
+                        'top_up_count':  pos.get('top_up_count', 0) + 1,
+                    })
+                    notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, f'TOP-UP/{signal}')
+                    print(f"  TOP-UP {filled_qty:.6g} {symbol} @ {avg_price:.4f} (${invested_usdt:.2f}) new_avg={new_entry:.4f}")
+                else:
+                    state['positions'][symbol] = {
+                        'quantity':      filled_qty,
+                        'entry_price':   avg_price,
+                        'highest_price': avg_price,
+                        'entry_time':    datetime.now(timezone.utc).isoformat(),
+                        'invested_usdt': invested_usdt,
+                        'top_up_count':  0,
+                    }
+                    notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, signal)
+                    print(f"  BOUGHT {filled_qty:.6g} {symbol} @ {avg_price:.4f} (${invested_usdt:.2f})")
+                    open_count += 1
 
                 tradeable_usdt -= invested_usdt
-                open_count     += 1
 
             time.sleep(1.0)
         except Exception:
