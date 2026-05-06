@@ -12,8 +12,9 @@ from pathlib import Path
 
 from bot.config import (
     TAKE_PROFIT_PCT, STOP_LOSS_PCT, TRAIL_PCT, COOLDOWN_HOURS,
-    MAX_POS_PCT, MIN_ORDER_USDT, RESERVE_PCT,
-    MAX_POSITIONS, TRADE_PAIRS,
+    MAX_POS_PCT, MAX_POS_PCT_STRONG, MAX_POS_PCT_MEME, MEME_PAIRS,
+    MIN_ORDER_USDT, RESERVE_PCT,
+    MAX_POSITIONS, TRADE_PAIRS, STALE_HOURS, STALE_BAND_PCT,
 )
 from bot.exchange import (
     get_candles,
@@ -24,7 +25,7 @@ from bot.exchange import (
     place_market_buy,
     place_market_sell,
 )
-from bot.strategy import get_signal, calc_rsi
+from bot.strategy import get_signal, calc_rsi, is_btc_bullish
 from bot.notifier import (
     notify_buy, notify_sell, notify_summary, notify_error,
 )
@@ -117,6 +118,9 @@ def run():
             reason       = ''
             is_stop_loss = False
 
+            entry_time = datetime.fromisoformat(pos.get('entry_time', datetime.now(timezone.utc).isoformat()))
+            hours_held = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
+
             if pnl_pct >= TAKE_PROFIT_PCT * 100:
                 should_sell = True
                 reason      = f'Take Profit +{pnl_pct:.2f}%'
@@ -127,6 +131,9 @@ def run():
                     reason = f'Hard Stop Loss {pnl_pct:.2f}%'
                 else:
                     reason = f'Trailing Stop {pnl_pct:.2f}% (peak ${highest:.4f})'
+            elif hours_held >= STALE_HOURS and abs(pnl_pct) <= STALE_BAND_PCT:
+                should_sell = True
+                reason      = f'Stale {hours_held:.1f}h ({pnl_pct:+.2f}%) — freeing capital'
 
             if should_sell:
                 actual_qty = get_coin_balance(coin)
@@ -160,6 +167,10 @@ def run():
 
     scan_results = []
 
+    btc_bullish = is_btc_bullish()
+    if not btc_bullish:
+        print("  ⚠️  BTC downtrend — pausing all altcoin buys this cycle")
+
     for symbol in TRADE_PAIRS:
         if open_count >= MAX_POSITIONS:
             print(f"  Max positions ({MAX_POSITIONS}) reached")
@@ -182,7 +193,17 @@ def run():
             scan_results.append((symbol, rsi, signal))
 
             if signal in ('BUY', 'BUY_STRONG'):
-                usdt_to_use = max(tradeable_usdt * MAX_POS_PCT, MIN_ORDER_USDT)
+                if not btc_bullish and symbol != 'BTC/USDT':
+                    print(f"  {symbol}: skipped — BTC downtrend")
+                    continue
+
+                if symbol in MEME_PAIRS:
+                    pos_pct = MAX_POS_PCT_MEME
+                elif signal == 'BUY_STRONG':
+                    pos_pct = MAX_POS_PCT_STRONG
+                else:
+                    pos_pct = MAX_POS_PCT
+                usdt_to_use = max(tradeable_usdt * pos_pct, MIN_ORDER_USDT)
 
                 if usdt_to_use > tradeable_usdt:
                     print(f"  Not enough USDT for {symbol}")

@@ -1,6 +1,16 @@
 from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD, VOL_RATIO_MIN, RSI_SLOPE_BARS
 
 
+def is_btc_bullish() -> bool:
+    """Returns True if BTC EMA9 > EMA21. If check fails, assume bullish to not block trading."""
+    try:
+        from bot.exchange import get_candles
+        prices, _ = get_candles('BTC/USDT')
+        return calc_ema(prices, EMA_FAST) > calc_ema(prices, EMA_SLOW)
+    except Exception:
+        return True
+
+
 def calc_ema(prices: list[float], period: int) -> float:
     if not prices:
         return 0.0

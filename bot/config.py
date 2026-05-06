@@ -5,10 +5,15 @@ TRAIL_PCT        = 0.025   # Trailing stop 2.5% below peak
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
 VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average to confirm buy
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
-MAX_POS_PCT      = 0.15    # Max 15% of tradeable USDT per coin (10 positions)
-MIN_ORDER_USDT   = 5.0     # Minimum single order in USDT
-RESERVE_PCT      = 0.05    # Keep 5% USDT reserve
-MAX_POSITIONS    = 10      # Hold at most 10 coins
+MAX_POS_PCT        = 0.10  # Max 10% per coin (BUY signal)
+MAX_POS_PCT_STRONG = 0.20  # Max 20% per coin (BUY_STRONG signal)
+MAX_POS_PCT_MEME   = 0.08  # Max 8% for meme coins (PEPE/SHIB/DOGE)
+MEME_PAIRS         = {'PEPE/USDT', 'SHIB/USDT', 'DOGE/USDT'}
+MIN_ORDER_USDT     = 5.0   # Minimum single order in USDT
+RESERVE_PCT        = 0.05  # Keep 5% USDT reserve
+MAX_POSITIONS      = 10    # Hold at most 10 coins
+STALE_HOURS        = 6     # Exit flat positions after 6 hours
+STALE_BAND_PCT     = 1.0   # "Flat" = P&L between -1% and +1%
 
 # ─── EMA Settings ─────────────────────────────────────────────────────────────
 EMA_FAST         = 9       # Fast EMA
