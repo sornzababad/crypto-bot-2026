@@ -20,6 +20,7 @@ from bot.config import (
     TAKE_PROFIT_PCT, STOP_LOSS_PCT,
     MAX_POS_PCT, MIN_ORDER_THB, RESERVE_PCT,
     MAX_POSITIONS, TRADE_PAIRS,
+    FEE_PCT,
 )
 from bot.exchange import (
     get_closing_prices,
@@ -68,16 +69,18 @@ def run():
     for symbol, pos in list(state['positions'].items()):
         coin = symbol.split('/')[0]
         try:
+            prices        = get_closing_prices(symbol)
+            signal        = get_signal(prices)
             qty           = float(pos['quantity'])
             entry_price   = float(pos['entry_price'])
             current_price = get_current_price(symbol)
             coin_value    = qty * current_price
             total_value  += coin_value
             pnl_pct       = (current_price - entry_price) / entry_price * 100
-            pnl_map[symbol] = {'pnl_pct': pnl_pct}
+            pnl_map[symbol] = {'pnl_pct': pnl_pct, 'signal': signal}
 
             print(f"  {symbol}: entry={entry_price:.2f} now={current_price:.2f}"
-                  f" pnl={pnl_pct:+.2f}%")
+                  f" pnl={pnl_pct:+.2f}% signal={signal}")
 
             should_sell = False
             reason      = ''
@@ -88,6 +91,9 @@ def run():
             elif pnl_pct <= -(STOP_LOSS_PCT * 100):
                 should_sell = True
                 reason      = f'Stop Loss {pnl_pct:.2f}%'
+            elif signal == 'SELL':
+                should_sell = True
+                reason      = 'Trend Reversal'
 
             if should_sell:
                 actual_qty = get_coin_balance(coin)
@@ -96,7 +102,7 @@ def run():
                     filled_price = float(order.get('fills', [{}])[0].get('price', 0) or current_price)
                     thb_returned = actual_qty * filled_price
                     invested_thb = float(pos.get('invested_thb', thb_returned))
-                    realized_thb = thb_returned - invested_thb
+                    realized_thb = thb_returned * (1 - FEE_PCT) - invested_thb
                     state['realized_pnl_thb'] = state.get('realized_pnl_thb', 0) + realized_thb
                     notify_sell(symbol, filled_price, actual_qty,
                                 thb_returned, reason, pnl_pct)
