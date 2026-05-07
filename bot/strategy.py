@@ -1,4 +1,4 @@
-from bot.config import EMA_FAST, EMA_SLOW, RSI_OVERBOUGHT, RSI_OVERSOLD
+from bot.config import EMA_FAST, EMA_SLOW, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD
 
 
 def calc_ema(prices: list[float], period: int) -> float:
@@ -13,7 +13,7 @@ def calc_ema(prices: list[float], period: int) -> float:
     return ema
 
 
-def calc_rsi(prices: list[float], period: int = 14) -> float:
+def calc_rsi(prices: list[float], period: int = RSI_PERIOD) -> float:
     if len(prices) < period + 1:
         return 50.0
     changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
@@ -31,33 +31,38 @@ def calc_rsi(prices: list[float], period: int = 14) -> float:
 
 def get_signal(prices: list[float]) -> str:
     """
-    EMA State-primary strategy with RSI guards.
+    EMA Crossover strategy with RSI filters for frequent trading.
 
     Logic:
-      - EMA_FAST > EMA_SLOW  →  uptrend  →  BUY  (unless RSI overbought)
-      - EMA_FAST < EMA_SLOW  →  downtrend →  SELL (unless RSI oversold)
-      - RSI guards only block entries in extreme conditions to avoid chasing
+      - Detect EMA_FAST crossing above EMA_SLOW → BUY (bullish crossover)
+      - Detect EMA_FAST crossing below EMA_SLOW → SELL (bearish crossover)
+      - RSI filters prevent entries in extreme conditions (optional for more trades)
 
-    Returns: 'BUY_STRONG' | 'BUY' | 'HOLD' | 'SELL' | 'SELL_STRONG'
+    Returns: 'BUY' | 'SELL' | 'HOLD'
     """
-    if len(prices) < EMA_SLOW:
+    if len(prices) < EMA_SLOW + 1:  # Need extra candle for previous EMA
         return 'HOLD'
 
-    rsi     = calc_rsi(prices)
-    ema_f   = calc_ema(prices, EMA_FAST)
-    ema_s   = calc_ema(prices, EMA_SLOW)
-    uptrend = ema_f > ema_s
-
-    if uptrend:
-        if rsi >= RSI_OVERBOUGHT:
-            return 'HOLD'          # trending up but too hot — wait for cooldown
-        if rsi <= 40:
-            return 'BUY_STRONG'    # uptrend + deeply oversold = strong entry
-        return 'BUY'               # uptrend — standard entry
-
-    else:  # downtrend
-        if rsi <= RSI_OVERSOLD:
-            return 'HOLD'          # trending down but too cold — bounce risk
-        if rsi >= 65:
-            return 'SELL_STRONG'   # downtrend + overbought = strong exit
-        return 'SELL'              # downtrend — standard exit
+    rsi = calc_rsi(prices)
+    
+    # Current EMAs
+    ema_f = calc_ema(prices, EMA_FAST)
+    ema_s = calc_ema(prices, EMA_SLOW)
+    
+    # Previous EMAs (using prices[:-1])
+    prev_prices = prices[:-1]
+    prev_ema_f = calc_ema(prev_prices, EMA_FAST)
+    prev_ema_s = calc_ema(prev_prices, EMA_SLOW)
+    
+    # Detect crossovers
+    prev_uptrend = prev_ema_f > prev_ema_s
+    curr_uptrend = ema_f > ema_s
+    
+    if not prev_uptrend and curr_uptrend:  # Bullish crossover
+        if rsi < RSI_OVERBOUGHT:  # Optional filter: not too overbought
+            return 'BUY'
+    elif prev_uptrend and not curr_uptrend:  # Bearish crossover
+        if rsi > RSI_OVERSOLD:  # Optional filter: not too oversold
+            return 'SELL'
+    
+    return 'HOLD'

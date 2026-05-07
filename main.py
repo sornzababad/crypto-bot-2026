@@ -134,7 +134,7 @@ def run():
             print(f"  {symbol}: RSI={rsi} signal={signal}")
             scan_results.append((symbol, rsi, signal))
 
-            if signal in ('BUY', 'BUY_STRONG'):
+            if signal == 'BUY':
                 thb_to_use = max(tradeable_thb * MAX_POS_PCT, MIN_ORDER_THB)
 
                 if thb_to_use > tradeable_thb:

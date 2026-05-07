@@ -10,7 +10,8 @@ MAX_POSITIONS    = 5       # Hold at most 5 coins     (was 4)
 EMA_FAST         = 9       # Fast EMA — more reactive (was 12)
 EMA_SLOW         = 21      # Slow EMA — trend baseline (was 26)
 
-# ─── RSI Guards (prevent entry in extreme conditions only) ────────────────────
+# ─── RSI Settings ───────────────────────────────────────────────────────────
+RSI_PERIOD       = 14     # RSI calculation period
 RSI_OVERBOUGHT   = 72      # Don't BUY if RSI >= 72 (too hot)
 RSI_OVERSOLD     = 28      # Don't SELL if RSI <= 28 (too cold, bounce risk)
 
