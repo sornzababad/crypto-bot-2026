@@ -1,6 +1,7 @@
 import os
 import requests
 from datetime import datetime, timezone, timedelta
+from bot.config import TAKE_PROFIT_PCT, STOP_LOSS_PCT
 
 LINE_TOKEN = os.getenv('LINE_TOKEN', '')
 USER_ID    = os.getenv('LINE_USER_ID', '')
@@ -28,30 +29,30 @@ def _push(text: str):
 
 
 def notify_buy(symbol: str, price: float, quantity: float,
-               invested_thb: float, rsi: float, signal: str):
+               invested_usdt: float, rsi: float, signal: str):
     coin = symbol.split('/')[0]
     text = (
         f"🟢 ซื้อ {coin}\n"
-        f"ราคา: {price:,.2f} ฿\n"
+        f"ราคา: ${price:,.4f}\n"
         f"จำนวน: {quantity:.6g} {coin}\n"
-        f"ลงทุน: {invested_thb:,.0f} ฿\n"
+        f"ลงทุน: ${invested_usdt:,.2f} USDT\n"
         f"สัญญาณ: {signal} (RSI {rsi:.0f})\n"
-        f"TP: {price*(1+0.025):,.2f} ฿  |  SL: {price*(1-0.030):,.2f} ฿\n"
+        f"TP: ${price*(1+TAKE_PROFIT_PCT):,.4f}  |  SL: ${price*(1-STOP_LOSS_PCT):,.4f}\n"
         f"⏰ {_now_bkk()}"
     )
     _push(text)
 
 
 def notify_sell(symbol: str, price: float, quantity: float,
-                thb_returned: float, reason: str, pnl_pct: float):
+                usdt_returned: float, reason: str, pnl_pct: float):
     coin = symbol.split('/')[0]
     icon = '🟢' if pnl_pct >= 0 else '🔴'
     sign = '+' if pnl_pct >= 0 else ''
     text = (
         f"{icon} ขาย {coin}\n"
-        f"ราคา: {price:,.2f} ฿\n"
+        f"ราคา: ${price:,.4f}\n"
         f"จำนวน: {quantity:.6g} {coin}\n"
-        f"ได้รับ: {thb_returned:,.0f} ฿\n"
+        f"ได้รับ: ${usdt_returned:,.2f} USDT\n"
         f"กำไร/ขาดทุน: {sign}{pnl_pct:.2f}%\n"
         f"เหตุผล: {reason}\n"
         f"⏰ {_now_bkk()}"
@@ -59,15 +60,15 @@ def notify_sell(symbol: str, price: float, quantity: float,
     _push(text)
 
 
-def notify_summary(thb_balance: float, total_value: float,
-                   positions: dict, realized_pnl_thb: float,
+def notify_summary(usdt_balance: float, total_value: float,
+                   positions: dict, realized_pnl_usdt: float,
                    scan_results: list = None):
-    sign  = '+' if realized_pnl_thb >= 0 else ''
+    sign  = '+' if realized_pnl_usdt >= 0 else ''
     lines = [
         f"📊 สรุปพอร์ต — {_now_bkk()}",
-        f"มูลค่ารวม: {total_value:,.0f} ฿",
-        f"THB ว่าง: {thb_balance:,.0f} ฿",
-        f"กำไร/ขาดทุนสะสม: {sign}{realized_pnl_thb:,.2f} ฿",
+        f"มูลค่ารวม: ${total_value:,.2f} USDT",
+        f"USDT ว่าง: ${usdt_balance:,.2f}",
+        f"กำไร/ขาดทุนสะสม: {sign}{realized_pnl_usdt:,.2f} USDT",
         "",
     ]
     if positions:
@@ -89,6 +90,21 @@ def notify_summary(thb_balance: float, total_value: float,
             lines.append(f"  {coin}: {rsi}{tag}")
 
     _push("\n".join(lines))
+
+
+def notify_stock_signal(symbol: str, price: float, signal: str, rsi: float):
+    if 'BUY' in signal:
+        icon, action = '📈', 'สัญญาณซื้อ'
+    else:
+        icon, action = '📉', 'สัญญาณขาย'
+    strength = ' (แรง)' if 'STRONG' in signal else ''
+    text = (
+        f"{icon} หุ้น US: {symbol}\n"
+        f"ราคา: ${price:,.2f}\n"
+        f"{action}{strength} — RSI {rsi:.0f}\n"
+        f"⏰ {_now_bkk()}"
+    )
+    _push(text)
 
 
 def notify_error(message: str):

@@ -38,11 +38,18 @@ def _headers() -> dict:
 
 
 def _unwrap(res: requests.Response) -> any:
-    """BinanceTH wraps all responses: {"code":0,"data":<payload>}"""
-    res.raise_for_status()
-    body = res.json()
+    """BinanceTH wraps most responses: {"code":0,"data":<payload>}
+    but klines returns a raw list directly."""
+    try:
+        body = res.json()
+    except Exception:
+        res.raise_for_status()
+        return {}
+    if isinstance(body, list):
+        return body
     if isinstance(body, dict) and body.get('code', 0) != 0:
-        raise RuntimeError(f"BinanceTH API error {body.get('code')}: {body.get('msg')}")
+        raise RuntimeError(f"BinanceTH error {body.get('code')}: {body.get('msg')} (HTTP {res.status_code})")
+    res.raise_for_status()
     return body.get('data', body)
 
 
@@ -91,14 +98,22 @@ def _round_qty(symbol: str, qty: float) -> float:
 
 # ─── Public endpoints ─────────────────────────────────────────────────────────
 
-def get_closing_prices(symbol: str) -> list[float]:
+def get_candles(symbol: str) -> tuple[list[float], list[float]]:
+    """Returns (closes, volumes) for the configured timeframe."""
     data = _get_public('/api/v1/klines', {
         'symbol':   symbol.replace('/', ''),
         'interval': KLINE_TIMEFRAME,
         'limit':    KLINE_LIMIT,
     })
     rows = data if isinstance(data, list) else data.get('data', [])
-    return [float(c[4]) for c in rows]
+    closes  = [float(c[4]) for c in rows]
+    volumes = [float(c[5]) for c in rows]
+    return closes, volumes
+
+
+def get_closing_prices(symbol: str) -> list[float]:
+    closes, _ = get_candles(symbol)
+    return closes
 
 
 def get_current_price(symbol: str) -> float:
@@ -124,13 +139,24 @@ def get_free_thb() -> float:
     return get_balances().get('THB', 0.0)
 
 
+def get_free_usdt() -> float:
+    return get_balances().get('USDT', 0.0)
+
+
 def get_coin_balance(coin: str) -> float:
     return get_balances().get(coin, 0.0)
 
 
-def place_market_buy(symbol: str, thb_amount: float) -> dict:
+def place_market_buy(symbol: str, usdt_amount: float) -> dict:
+    from bot.config import MIN_ORDER_USDT
     price    = get_current_price(symbol)
-    quantity = _round_qty(symbol, thb_amount / price)
+    step     = _step_size(symbol.replace('/', ''))
+    quantity = _round_qty(symbol, usdt_amount / price)
+    # bump up by one step if rounded value falls below minimum
+    if quantity * price < MIN_ORDER_USDT:
+        quantity = round(quantity + step, 10)
+    if quantity * price < MIN_ORDER_USDT:
+        raise ValueError(f"Order value ${quantity * price:.2f} below ${MIN_ORDER_USDT} minimum after bump")
     return _post_private('/api/v1/order', {
         'symbol':   symbol.replace('/', ''),
         'side':     'BUY',

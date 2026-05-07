@@ -1,0 +1,18 @@
+[Unit]
+Description=Crypto Trading Bot (BinanceTH)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/home/botuser/crypto-bot-2026
+EnvironmentFile=/home/botuser/crypto-bot-2026/.env
+ExecStart=/home/botuser/crypto-bot-2026/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/botuser/bot.log
+StandardError=append:/home/botuser/bot.log
+
+[Install]
+WantedBy=multi-user.target
