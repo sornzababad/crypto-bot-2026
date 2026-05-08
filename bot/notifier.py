@@ -1,3 +1,8 @@
+import os
+from datetime import datetime, timedelta, timezone
+
+import requests
+
 from bot.config import TAKE_PROFIT_PCT, STOP_LOSS_PCT
 
 LINE_TOKEN = os.getenv('LINE_TOKEN', '')
