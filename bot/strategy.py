@@ -1,4 +1,4 @@
-from bot.config import EMA_FAST, EMA_SLOW, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD
+from bot.config import EMA_FAST, EMA_SLOW, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD, TREND_STRENGTH_MIN, CONFIRMATION_BUFFER
 
 
 def calc_ema(prices: list[float], period: int) -> float:
@@ -31,25 +31,28 @@ def calc_rsi(prices: list[float], period: int = RSI_PERIOD) -> float:
 
 def get_signal(prices: list[float]) -> str:
     """
-    EMA Crossover strategy with RSI filters for frequent trading.
+    Enhanced EMA Crossover strategy with trend strength and confirmation.
 
     Logic:
-      - Detect EMA_FAST crossing above EMA_SLOW → BUY (bullish crossover)
-      - Detect EMA_FAST crossing below EMA_SLOW → SELL (bearish crossover)
-      - RSI filters prevent entries in extreme conditions (optional for more trades)
+      - Detect EMA_FAST crossing above EMA_SLOW → potential BUY
+      - Require trend strength (EMA separation > 0.5%)
+      - Require price confirmation (close above EMA + buffer)
+      - RSI filters prevent entries in extreme conditions
+      - Same logic for SELL signals
 
     Returns: 'BUY' | 'SELL' | 'HOLD'
     """
-    if len(prices) < EMA_SLOW + 1:  # Need extra candle for previous EMA
+    if len(prices) < EMA_SLOW + 1:
         return 'HOLD'
 
     rsi = calc_rsi(prices)
+    current_price = prices[-1]  # Latest closing price
     
     # Current EMAs
     ema_f = calc_ema(prices, EMA_FAST)
     ema_s = calc_ema(prices, EMA_SLOW)
     
-    # Previous EMAs (using prices[:-1])
+    # Previous EMAs
     prev_prices = prices[:-1]
     prev_ema_f = calc_ema(prev_prices, EMA_FAST)
     prev_ema_s = calc_ema(prev_prices, EMA_SLOW)
@@ -58,11 +61,21 @@ def get_signal(prices: list[float]) -> str:
     prev_uptrend = prev_ema_f > prev_ema_s
     curr_uptrend = ema_f > ema_s
     
+    # Trend strength: EMA separation as percentage
+    ema_separation = abs(ema_f - ema_s) / ema_s
+    
     if not prev_uptrend and curr_uptrend:  # Bullish crossover
-        if rsi < RSI_OVERBOUGHT:  # Optional filter: not too overbought
+        # Check trend strength and confirmation
+        if (ema_separation >= TREND_STRENGTH_MIN and 
+            rsi < RSI_OVERBOUGHT and 
+            current_price > ema_f * (1 + CONFIRMATION_BUFFER)):
             return 'BUY'
+            
     elif prev_uptrend and not curr_uptrend:  # Bearish crossover
-        if rsi > RSI_OVERSOLD:  # Optional filter: not too oversold
+        # Check trend strength and confirmation
+        if (ema_separation >= TREND_STRENGTH_MIN and 
+            rsi > RSI_OVERSOLD and 
+            current_price < ema_f * (1 - CONFIRMATION_BUFFER)):
             return 'SELL'
     
     return 'HOLD'

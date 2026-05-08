@@ -11,10 +11,29 @@ Flow each run:
 """
 
 import json
+import os
 import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def load_dotenv(path: Path = Path('.env')):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip().strip('"').strip("'")
+        os.environ[key] = value
+
+
+load_dotenv()
 
 from bot.config import (
     TAKE_PROFIT_PCT, STOP_LOSS_PCT,
