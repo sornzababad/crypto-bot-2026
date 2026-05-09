@@ -1,7 +1,14 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-# NO fixed Take Profit — trailing stop handles all exits, letting winners run
-STOP_LOSS_PCT    = 0.030   # Hard stop -3% from avg entry
-TRAIL_PCT        = 0.025   # Trailing stop 2.5% below peak price
+# NO fixed Take Profit — trailing stop handles trend exits, BB mid handles sideways
+STOP_LOSS_PCT    = 0.030   # Trend hard stop -3% from avg entry
+TRAIL_PCT        = 0.025   # Trend trailing stop 2.5% below peak price
+SL_SIDEWAYS      = 0.020   # Sideways hard stop -2% (tighter, expect quick bounce)
+
+# ─── Market Regime Detection ──────────────────────────────────────────────────
+ADX_PERIOD       = 14      # ADX smoothing period
+ADX_THRESHOLD    = 25      # ADX < 25 = sideways (mean reversion), >= 25 = trend (momentum)
+BB_LENGTH        = 20      # Bollinger Bands period
+BB_STD           = 2.0     # Bollinger Bands standard deviation multiplier
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
 VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average to confirm buy
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum

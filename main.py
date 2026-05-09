@@ -1,9 +1,14 @@
 """
 Crypto Trading Bot — BinanceTH (USDT pairs)
 Runs continuously on VPS, scanning every 15 min.
-Strategy: EMA9/21 crossover + RSI + Volume + RSI slope momentum.
-Exit: Trailing stop (2.5% from peak) + Hard SL (-3%) + Stale exit (6h ±1%).
-No fixed Take Profit — let winners run.
+
+Strategy: Market Regime Detection (ADX-based)
+  - ADX >= 25 → Trend → EMA9/21 + RSI + Volume momentum
+  - ADX <  25 → Sideways → Bollinger Band mean reversion
+
+Trend exits:   Trailing stop (2.5% from peak) + Hard SL (-3%)
+Sideways exits: Price hits SMA20 (TP) + Hard SL (-2%)
+Global:        BTC RSI filter + Stale exit (6h ±1%) + Cooldown after SL
 """
 
 import json
@@ -14,21 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bot.config import (
-    STOP_LOSS_PCT, TRAIL_PCT, COOLDOWN_HOURS,
+    STOP_LOSS_PCT, SL_SIDEWAYS, TRAIL_PCT, COOLDOWN_HOURS,
     MAX_POS_PCT, MAX_POS_PCT_STRONG, MAX_POS_PCT_MEME, MEME_PAIRS,
-    MIN_ORDER_USDT, RESERVE_PCT,
-    MAX_POSITIONS, TRADE_PAIRS, STALE_HOURS, STALE_BAND_PCT,
+    MIN_ORDER_USDT, RESERVE_PCT, MAX_POSITIONS, TRADE_PAIRS,
+    STALE_HOURS, STALE_BAND_PCT, BB_LENGTH, BB_STD,
 )
 from bot.exchange import (
-    get_candles,
-    get_balances,
-    get_free_usdt,
-    get_coin_balance,
-    get_current_price,
-    place_market_buy,
-    place_market_sell,
+    get_candles, get_balances, get_free_usdt, get_coin_balance,
+    get_current_price, place_market_buy, place_market_sell,
 )
-from bot.strategy import get_signal, calc_rsi, is_btc_bullish
+from bot.strategy import (
+    get_signal, calc_rsi, calc_adx, is_btc_bullish, calc_bollinger_bands,
+)
 from bot.notifier import (
     notify_buy, notify_sell, notify_summary, notify_error, notify_startup,
 )
@@ -53,13 +55,12 @@ def save_state(state: dict):
 
 
 def reconcile_positions(state: dict):
-    """Pull any coins held on exchange but missing from state back into tracking."""
+    """Pull coins held on exchange but missing from state into tracking."""
     try:
         balances = get_balances()
     except Exception:
         return
 
-    # Remove corrupted positions (entry_price = 0 from old bugs)
     bad = [s for s, p in state['positions'].items() if float(p.get('entry_price', 1)) <= 0]
     for s in bad:
         del state['positions'][s]
@@ -83,11 +84,61 @@ def reconcile_positions(state: dict):
                 'entry_time':    datetime.now(timezone.utc).isoformat(),
                 'invested_usdt': value,
                 'top_up_count':  0,
+                'regime':        'trend',   # default reconciled positions to trend logic
                 'reconciled':    True,
             }
-            print(f"  Reconciled: {symbol} {qty:.6g} @ {price:.4f} (${value:.2f})")
+            print(f"  Reconciled: {symbol} {qty:.6g} @ ${price:.4f} (${value:.2f})")
         except Exception:
             traceback.print_exc()
+
+
+# ─── Exit helpers ─────────────────────────────────────────────────────────────
+
+def _check_trend_exit(pos: dict, current_price: float, pnl_pct: float, hours_held: float):
+    """Trailing stop + hard SL for trend positions. Returns (should_sell, reason, is_stop_loss)."""
+    entry_price = float(pos['entry_price'])
+    highest     = float(pos.get('highest_price', entry_price))
+    trail_sl    = highest * (1 - TRAIL_PCT)
+    hard_sl     = entry_price * (1 - STOP_LOSS_PCT)
+    active_sl   = max(trail_sl, hard_sl)
+
+    if current_price <= active_sl:
+        is_sl = pnl_pct < 0
+        if current_price <= hard_sl:
+            reason = f'Trend Hard SL {pnl_pct:.2f}%'
+        else:
+            reason = f'Trend Trail Stop {pnl_pct:.2f}% (peak ${highest:.4f})'
+        return True, reason, is_sl
+
+    if hours_held >= STALE_HOURS and abs(pnl_pct) <= STALE_BAND_PCT:
+        return True, f'Stale {hours_held:.1f}h ({pnl_pct:+.2f}%)', False
+
+    return False, '', False
+
+
+def _check_sideways_exit(pos: dict, symbol: str, current_price: float,
+                         pnl_pct: float, hours_held: float):
+    """BB mid TP + hard SL for sideways (mean reversion) positions."""
+    entry_price = float(pos['entry_price'])
+    hard_sl     = entry_price * (1 - SL_SIDEWAYS)
+
+    # Need current BB middle band as TP target
+    try:
+        closes, _, _, _ = get_candles(symbol)
+        _, bb_mid, _    = calc_bollinger_bands(closes, BB_LENGTH, BB_STD)
+    except Exception:
+        bb_mid = entry_price * 1.02   # fallback: +2% if candle fetch fails
+
+    if current_price >= bb_mid:
+        return True, f'Mean Rev TP: hit SMA20 ${bb_mid:.4f} ({pnl_pct:+.2f}%)', False
+
+    if current_price <= hard_sl:
+        return True, f'Mean Rev Hard SL {pnl_pct:.2f}%', True
+
+    if hours_held >= STALE_HOURS and abs(pnl_pct) <= STALE_BAND_PCT:
+        return True, f'Stale {hours_held:.1f}h ({pnl_pct:+.2f}%)', False
+
+    return False, '', False
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -98,7 +149,7 @@ def run(is_startup: bool = False):
 
     # ── Step 1: Manage open positions ─────────────────────────────────────────
     usdt_balance = get_free_usdt()
-    total_value  = usdt_balance   # will accumulate coin values below
+    total_value  = usdt_balance
     pnl_map      = {}
 
     print(f"\n=== Open positions: {list(state['positions'].keys())} ===")
@@ -118,37 +169,34 @@ def run(is_startup: bool = False):
             coin_value    = qty * current_price
             total_value  += coin_value
             pnl_pct       = (current_price - entry_price) / entry_price * 100
-            pnl_map[symbol] = {'pnl_pct': pnl_pct, 'top_up_count': pos.get('top_up_count', 0)}
+            regime        = pos.get('regime', 'trend')
+            pnl_map[symbol] = {
+                'pnl_pct':     pnl_pct,
+                'top_up_count': pos.get('top_up_count', 0),
+                'regime':      regime,
+            }
 
-            highest          = max(current_price, float(pos.get('highest_price', entry_price)))
+            # Update peak price (only meaningful for trend positions)
+            highest = max(current_price, float(pos.get('highest_price', entry_price)))
             pos['highest_price'] = highest
-            trail_sl         = highest * (1 - TRAIL_PCT)
-            hard_sl          = entry_price * (1 - STOP_LOSS_PCT)
-            active_sl        = max(trail_sl, hard_sl)
 
-            print(f"  {symbol}: entry={entry_price:.4f} now={current_price:.4f}"
-                  f" peak={highest:.4f} sl={active_sl:.4f} pnl={pnl_pct:+.2f}%")
-
-            should_sell  = False
-            reason       = ''
-            is_stop_loss = False
+            print(f"  {symbol} [{regime}]: entry=${entry_price:.4f} now=${current_price:.4f}"
+                  f" peak=${highest:.4f} pnl={pnl_pct:+.2f}%")
 
             try:
-                entry_time = datetime.fromisoformat(pos.get('entry_time', datetime.now(timezone.utc).isoformat()))
+                entry_time = datetime.fromisoformat(
+                    pos.get('entry_time', datetime.now(timezone.utc).isoformat()))
                 hours_held = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
             except Exception:
                 hours_held = 0
 
-            if current_price <= active_sl:
-                should_sell  = True
-                is_stop_loss = pnl_pct < 0
-                if current_price <= hard_sl:
-                    reason = f'Hard SL {pnl_pct:.2f}%'
-                else:
-                    reason = f'Trailing Stop {pnl_pct:.2f}% (peak ${highest:.4f})'
-            elif hours_held >= STALE_HOURS and abs(pnl_pct) <= STALE_BAND_PCT:
-                should_sell = True
-                reason      = f'Stale {hours_held:.1f}h ({pnl_pct:+.2f}%) — freeing capital'
+            # Regime-specific exit logic
+            if regime == 'sideways':
+                should_sell, reason, is_stop_loss = _check_sideways_exit(
+                    pos, symbol, current_price, pnl_pct, hours_held)
+            else:
+                should_sell, reason, is_stop_loss = _check_trend_exit(
+                    pos, current_price, pnl_pct, hours_held)
 
             if should_sell:
                 actual_qty = get_coin_balance(coin)
@@ -156,20 +204,22 @@ def run(is_startup: bool = False):
                     order      = place_market_sell(symbol, actual_qty)
                     fills      = order.get('fills', [])
                     cum_quote  = float(order.get('cummulativeQuoteQty', 0))
-                    filled_qty = float(order.get('executedQty') or sum(float(f['qty']) for f in fills) or actual_qty)
+                    filled_qty = float(order.get('executedQty') or
+                                       sum(float(f['qty']) for f in fills) or actual_qty)
                     if cum_quote > 0:
                         usdt_returned = cum_quote
                         filled_price  = cum_quote / filled_qty if filled_qty > 0 else current_price
                     else:
                         filled_price  = current_price
                         usdt_returned = filled_qty * filled_price
-                    invested_usdt = float(pos.get('invested_usdt', usdt_returned))
-                    realized      = usdt_returned - invested_usdt
+                    invested      = float(pos.get('invested_usdt', usdt_returned))
+                    realized      = usdt_returned - invested
                     state['realized_pnl_usdt'] = state.get('realized_pnl_usdt', 0) + realized
                     notify_sell(symbol, filled_price, filled_qty, usdt_returned, reason, pnl_pct)
                     print(f"  SOLD {symbol}: {reason} | realized={realized:+.2f} USDT")
                     if is_stop_loss:
-                        state.setdefault('cooldowns', {})[symbol] = int(datetime.now(timezone.utc).timestamp())
+                        state.setdefault('cooldowns', {})[symbol] = int(
+                            datetime.now(timezone.utc).timestamp())
                 else:
                     print(f"  {symbol}: no balance on exchange — removing")
                 del state['positions'][symbol]
@@ -179,7 +229,6 @@ def run(is_startup: bool = False):
         except Exception:
             traceback.print_exc()
 
-    # ── Startup notification (after first scan so we have real total_value) ───
     if is_startup:
         notify_startup(total_value, len(state['positions']))
 
@@ -187,34 +236,33 @@ def run(is_startup: bool = False):
     open_count     = len(state['positions'])
     usdt_balance   = get_free_usdt()
     tradeable_usdt = usdt_balance * (1 - RESERVE_PCT)
+    portfolio_base = total_value * (1 - RESERVE_PCT)   # consistent sizing from total value
 
-    # Base position size from TOTAL portfolio value (not just free USDT)
-    # This ensures consistent sizing regardless of how much cash is free.
-    portfolio_base = total_value * (1 - RESERVE_PCT)
-
-    print(f"\n=== Scanning | USDT free: ${usdt_balance:.2f}"
-          f" | portfolio: ${total_value:.2f} | positions: {open_count}/{MAX_POSITIONS} ===")
+    print(f"\n=== Scanning | free=${usdt_balance:.2f} portfolio=${total_value:.2f}"
+          f" | positions={open_count}/{MAX_POSITIONS} ===")
 
     scan_results = []
     btc_bullish  = is_btc_bullish()
     if not btc_bullish:
-        print("  ⚠️  BTC RSI < 40 — pausing all altcoin buys this cycle")
+        print("  ⚠️  BTC RSI < 40 — pausing all new buys")
 
     for symbol in TRADE_PAIRS:
         is_existing = symbol in state['positions']
 
-        # Skip new entries when at max, still check top-ups on existing
         if not is_existing and open_count >= MAX_POSITIONS:
             continue
 
-        # Top-up eligibility
+        # Top-up eligibility (trend only, max 1)
         if is_existing:
             pos     = state['positions'][symbol]
+            regime  = pos.get('regime', 'trend')
             pnl_now = pnl_map.get(symbol, {}).get('pnl_pct', 0)
+            if regime != 'trend':
+                continue   # no pyramiding in sideways mode
             if pos.get('top_up_count', 0) >= 1:
                 continue
             if pnl_now < 1.0:
-                continue  # only add to confirmed winners
+                continue   # only add to confirmed winners
 
         # Cooldown check
         now_ts    = int(datetime.now(timezone.utc).timestamp())
@@ -226,14 +274,16 @@ def run(is_startup: bool = False):
             continue
 
         try:
-            prices, volumes = get_candles(symbol)
-            signal = get_signal(prices, volumes)
-            rsi    = round(calc_rsi(prices), 1)
+            closes, highs, lows, volumes = get_candles(symbol)
+            signal, regime = get_signal(closes, highs, lows, volumes)
+            rsi = round(calc_rsi(closes), 1)
 
             if is_existing:
-                print(f"  {symbol}: top-up? RSI={rsi} signal={signal} pnl={pnl_now:+.2f}%")
+                print(f"  {symbol}: top-up? [{regime}] RSI={rsi} signal={signal}"
+                      f" pnl={pnl_now:+.2f}%")
             else:
-                print(f"  {symbol}: RSI={rsi} signal={signal}")
+                adx_val = round(calc_adx(closes, highs, lows), 1)
+                print(f"  {symbol}: [{regime} ADX={adx_val}] RSI={rsi} signal={signal}")
                 scan_results.append((symbol, rsi, signal))
 
             if signal not in ('BUY', 'BUY_STRONG'):
@@ -253,10 +303,10 @@ def run(is_startup: bool = False):
                 pos_pct = MAX_POS_PCT
 
             if is_existing:
-                pos_pct = pos_pct * 0.5  # top-up = 50% of normal
+                pos_pct *= 0.5   # top-up = 50% of normal
 
             usdt_to_use = max(portfolio_base * pos_pct, MIN_ORDER_USDT)
-            usdt_to_use = min(usdt_to_use, tradeable_usdt)  # cap by available cash
+            usdt_to_use = min(usdt_to_use, tradeable_usdt)
 
             if usdt_to_use < MIN_ORDER_USDT:
                 print(f"  {symbol}: not enough USDT (${tradeable_usdt:.2f} available)")
@@ -265,7 +315,8 @@ def run(is_startup: bool = False):
             # Execute buy
             order      = place_market_buy(symbol, usdt_to_use)
             fills      = order.get('fills', [])
-            filled_qty = float(order.get('executedQty') or sum(float(f['qty']) for f in fills) or 0)
+            filled_qty = float(order.get('executedQty') or
+                               sum(float(f['qty']) for f in fills) or 0)
             cum_quote  = float(order.get('cummulativeQuoteQty', 0))
             if filled_qty > 0 and cum_quote > 0:
                 avg_price = cum_quote / filled_qty
@@ -275,6 +326,7 @@ def run(is_startup: bool = False):
                 filled_qty = usdt_to_use / avg_price
 
             invested_usdt = filled_qty * avg_price
+            label = f'TOP-UP/{signal} [{regime}]' if is_existing else f'{signal} [{regime}]'
 
             if is_existing:
                 pos          = state['positions'][symbol]
@@ -290,7 +342,6 @@ def run(is_startup: bool = False):
                     'invested_usdt': new_invested,
                     'top_up_count':  pos.get('top_up_count', 0) + 1,
                 })
-                notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, f'TOP-UP/{signal}')
                 print(f"  TOP-UP {filled_qty:.6g} {symbol} @ ${avg_price:.4f}"
                       f" (${invested_usdt:.2f}) new_avg=${new_entry:.4f}")
             else:
@@ -301,18 +352,20 @@ def run(is_startup: bool = False):
                     'entry_time':    datetime.now(timezone.utc).isoformat(),
                     'invested_usdt': invested_usdt,
                     'top_up_count':  0,
+                    'regime':        regime,
                 }
-                notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, signal)
-                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ ${avg_price:.4f} (${invested_usdt:.2f})")
+                print(f"  BOUGHT {filled_qty:.6g} {symbol} @ ${avg_price:.4f}"
+                      f" (${invested_usdt:.2f}) [{regime}]")
                 open_count += 1
 
+            notify_buy(symbol, avg_price, filled_qty, invested_usdt, rsi, label)
             tradeable_usdt -= invested_usdt
             time.sleep(1.0)
 
         except Exception:
             traceback.print_exc()
 
-    # ── Step 3: Portfolio summary every 30 min ────────────────────────────────
+    # ── Step 3: Summary every 30 min ─────────────────────────────────────────
     now_ts = int(datetime.now(timezone.utc).timestamp())
     if now_ts - state.get('last_summary_ts', 0) >= SUMMARY_EVERY:
         final_usdt = get_free_usdt()
@@ -327,7 +380,7 @@ def run(is_startup: bool = False):
         state['last_summary_ts'] = now_ts
 
     save_state(state)
-    print(f"\nDone. USDT: ${get_free_usdt():.2f} | Positions: {list(state['positions'].keys())}")
+    print(f"\nDone. USDT=${get_free_usdt():.2f} | Positions={list(state['positions'].keys())}")
 
 
 SCAN_INTERVAL = 900  # 15 minutes
@@ -340,7 +393,7 @@ if __name__ == '__main__':
             traceback.print_exc()
             notify_error(str(e))
     else:
-        print("Bot starting — USDT mode, scanning every 15 min")
+        print("Bot starting — regime-aware mode, scanning every 15 min")
         first_run = True
         while True:
             start = time.time()

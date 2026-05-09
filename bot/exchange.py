@@ -98,8 +98,10 @@ def _round_qty(symbol: str, qty: float) -> float:
 
 # ─── Public endpoints ─────────────────────────────────────────────────────────
 
-def get_candles(symbol: str) -> tuple[list[float], list[float]]:
-    """Returns (closes, volumes) for the configured timeframe."""
+def get_candles(symbol: str) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Returns (closes, highs, lows, volumes) for the configured timeframe.
+    Kline format: [open_time, open, high, low, close, volume, ...]
+    """
     data = _get_public('/api/v1/klines', {
         'symbol':   symbol.replace('/', ''),
         'interval': KLINE_TIMEFRAME,
@@ -107,12 +109,14 @@ def get_candles(symbol: str) -> tuple[list[float], list[float]]:
     })
     rows = data if isinstance(data, list) else data.get('data', [])
     closes  = [float(c[4]) for c in rows]
+    highs   = [float(c[2]) for c in rows]
+    lows    = [float(c[3]) for c in rows]
     volumes = [float(c[5]) for c in rows]
-    return closes, volumes
+    return closes, highs, lows, volumes
 
 
 def get_closing_prices(symbol: str) -> list[float]:
-    closes, _ = get_candles(symbol)
+    closes, _, _, _ = get_candles(symbol)
     return closes
 
 
