@@ -1,7 +1,7 @@
 import os
 import requests
 from datetime import datetime, timezone, timedelta
-from bot.config import TAKE_PROFIT_PCT, STOP_LOSS_PCT
+from bot.config import STOP_LOSS_PCT, TRAIL_PCT
 
 LINE_TOKEN = os.getenv('LINE_TOKEN', '')
 USER_ID    = os.getenv('LINE_USER_ID', '')
@@ -14,30 +14,45 @@ def _now_bkk() -> str:
 
 def _push(text: str):
     if not LINE_TOKEN or not USER_ID:
-        print(f"[LINE] {text}")
+        print(f"[LINE-NO-TOKEN] {text[:80]}")
         return
     url     = 'https://api.line.me/v2/bot/message/push'
     headers = {'Content-Type': 'application/json',
                'Authorization': f'Bearer {LINE_TOKEN}'}
-    res = requests.post(
-        url,
-        json={"to": USER_ID, "messages": [{"type": "text", "text": text}]},
-        headers=headers,
-        timeout=10,
+    try:
+        res = requests.post(
+            url,
+            json={"to": USER_ID, "messages": [{"type": "text", "text": text}]},
+            headers=headers,
+            timeout=10,
+        )
+        print(f"LINE {res.status_code}: {res.text[:120]}")
+    except Exception as e:
+        print(f"LINE send error: {e}")
+
+
+def notify_startup(total_value: float, positions: int):
+    _push(
+        f"🤖 Bot เริ่มทำงานแล้ว\n"
+        f"พอร์ต: ${total_value:,.2f} USDT\n"
+        f"ถือครอง: {positions} เหรียญ\n"
+        f"⏰ {_now_bkk()}"
     )
-    print(f"LINE {res.status_code}: {res.text[:120]}")
 
 
 def notify_buy(symbol: str, price: float, quantity: float,
                invested_usdt: float, rsi: float, signal: str):
     coin = symbol.split('/')[0]
+    is_topup = 'TOP-UP' in signal
+    icon = '🔼' if is_topup else '🟢'
+    label = 'เพิ่ม' if is_topup else 'ซื้อ'
     text = (
-        f"🟢 ซื้อ {coin}\n"
+        f"{icon} {label} {coin}\n"
         f"ราคา: ${price:,.4f}\n"
         f"จำนวน: {quantity:.6g} {coin}\n"
         f"ลงทุน: ${invested_usdt:,.2f} USDT\n"
         f"สัญญาณ: {signal} (RSI {rsi:.0f})\n"
-        f"TP: ${price*(1+TAKE_PROFIT_PCT):,.4f}  |  SL: ${price*(1-STOP_LOSS_PCT):,.4f}\n"
+        f"SL: ${price*(1-STOP_LOSS_PCT):,.4f}  |  Trail: {TRAIL_PCT*100:.1f}% จาก peak\n"
         f"⏰ {_now_bkk()}"
     )
     _push(text)
@@ -76,7 +91,8 @@ def notify_summary(usdt_balance: float, total_value: float,
         for sym, pos in positions.items():
             p   = pos.get('pnl_pct', 0.0)
             s   = '+' if p >= 0 else ''
-            lines.append(f"  • {sym.split('/')[0]}: {s}{p:.2f}%")
+            topped = ' [+]' if pos.get('top_up_count', 0) > 0 else ''
+            lines.append(f"  • {sym.split('/')[0]}: {s}{p:.2f}%{topped}")
         lines.append("")
     else:
         lines.append("(ไม่มีเหรียญในพอร์ต — รอสัญญาณซื้อ)")
@@ -90,21 +106,6 @@ def notify_summary(usdt_balance: float, total_value: float,
             lines.append(f"  {coin}: {rsi}{tag}")
 
     _push("\n".join(lines))
-
-
-def notify_stock_signal(symbol: str, price: float, signal: str, rsi: float):
-    if 'BUY' in signal:
-        icon, action = '📈', 'สัญญาณซื้อ'
-    else:
-        icon, action = '📉', 'สัญญาณขาย'
-    strength = ' (แรง)' if 'STRONG' in signal else ''
-    text = (
-        f"{icon} หุ้น US: {symbol}\n"
-        f"ราคา: ${price:,.2f}\n"
-        f"{action}{strength} — RSI {rsi:.0f}\n"
-        f"⏰ {_now_bkk()}"
-    )
-    _push(text)
 
 
 def notify_error(message: str):
