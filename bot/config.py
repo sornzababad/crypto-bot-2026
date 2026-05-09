@@ -10,7 +10,7 @@ ADX_THRESHOLD    = 25      # ADX < 25 = sideways (mean reversion), >= 25 = trend
 BB_LENGTH        = 20      # Bollinger Bands period
 BB_STD           = 2.0     # Bollinger Bands standard deviation multiplier
 COOLDOWN_HOURS   = 3       # Skip re-buy for 3h after a stop loss on same coin
-VOL_RATIO_MIN    = 1.5     # Volume must be 1.5x average to confirm buy
+VOL_RATIO_MIN    = 1.3     # Volume must be 1.3x average to confirm buy
 RSI_SLOPE_BARS   = 5       # RSI must be rising vs N bars ago to confirm momentum
 MAX_POS_PCT        = 0.12  # Max 12% per coin (BUY signal) — ~8 BUYs = full deploy
 MAX_POS_PCT_STRONG = 0.25  # Max 25% per coin (BUY_STRONG signal)

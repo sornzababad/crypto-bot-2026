@@ -259,7 +259,7 @@ def run(is_startup: bool = False):
             pnl_now = pnl_map.get(symbol, {}).get('pnl_pct', 0)
             if regime != 'trend':
                 continue   # no pyramiding in sideways mode
-            if pos.get('top_up_count', 0) >= 1:
+            if pos.get('top_up_count', 0) >= 2:
                 continue
             if pnl_now < 1.0:
                 continue   # only add to confirmed winners

@@ -152,7 +152,7 @@ def _sideways_signal(closes: list) -> str:
     rsi          = calc_rsi(closes)
     _, _, bb_low = calc_bollinger_bands(closes, BB_LENGTH, BB_STD)
 
-    if closes[-1] <= bb_low and rsi < 40:
+    if closes[-1] <= bb_low and rsi < 45:
         return 'BUY'
     return 'HOLD'
 
