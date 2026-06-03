@@ -15,19 +15,8 @@ def _now_bkk() -> str:
 
 
 def _push(text: str):
-    if not LINE_TOKEN or not USER_ID:
-        print(f"[LINE] {text}")
-        return
-    url     = 'https://api.line.me/v2/bot/message/push'
-    headers = {'Content-Type': 'application/json',
-               'Authorization': f'Bearer {LINE_TOKEN}'}
-    res = requests.post(
-        url,
-        json={"to": USER_ID, "messages": [{"type": "text", "text": text}]},
-        headers=headers,
-        timeout=10,
-    )
-    print(f"LINE {res.status_code}: {res.text[:120]}")
+    # LINE notifications disabled — log locally only
+    print(f"[LINE disabled] {text}")
 
 
 def notify_buy(symbol: str, price: float, quantity: float,
