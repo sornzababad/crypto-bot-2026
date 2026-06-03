@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a2e;
+    background: #fff;
+    padding: 32px 40px;
+    line-height: 1.55;
+  }
+
+  /* HEADER */
+  .header {
+    border-bottom: 3px solid #1a73e8;
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: 24pt;
+    font-weight: 700;
+    color: #1a1a2e;
+    letter-spacing: 0.5px;
+  }
+  .header .title {
+    font-size: 11.5pt;
+    color: #1a73e8;
+    font-weight: 600;
+    margin: 3px 0 10px 0;
+  }
+  .contact {
+    display: flex;
+    gap: 20px;
+    font-size: 9.5pt;
+    color: #444;
+    flex-wrap: wrap;
+  }
+  .contact span { display: flex; align-items: center; gap: 5px; }
+
+  /* SECTION */
+  .section { margin-bottom: 18px; }
+  .section-title {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #1a73e8;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    border-bottom: 1px solid #d0e4ff;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  /* SUMMARY */
+  .summary p { color: #333; }
+
+  /* EXPERIENCE */
+  .job { margin-bottom: 14px; }
+  .job-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .job-title { font-weight: 700; font-size: 10.5pt; color: #1a1a2e; }
+  .job-company { font-weight: 600; color: #1a73e8; font-size: 9.5pt; }
+  .job-date {
+    font-size: 9pt;
+    color: #666;
+    background: #f0f4ff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .job ul { margin-top: 5px; padding-left: 18px; }
+  .job ul li { margin-bottom: 3px; color: #333; font-size: 10pt; }
+  .job ul li strong { color: #1a1a2e; }
+
+  /* EDUCATION */
+  .edu-item { margin-bottom: 10px; }
+  .edu-degree { font-weight: 700; }
+  .edu-school { color: #1a73e8; font-weight: 600; }
+  .edu-detail { font-size: 9.5pt; color: #555; }
+
+  /* SKILLS TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th {
+    background: #1a73e8;
+    color: #fff;
+    text-align: left;
+    padding: 5px 10px;
+    font-weight: 600;
+    width: 30%;
+  }
+  td { padding: 5px 10px; border-bottom: 1px solid #e8eaf6; color: #333; }
+  tr:nth-child(even) td { background: #f8f9ff; }
+
+  /* CERTS */
+  .cert-list { list-style: none; padding: 0; }
+  .cert-list li {
+    padding: 4px 0;
+    padding-left: 16px;
+    position: relative;
+    color: #333;
+    font-size: 10pt;
+  }
+  .cert-list li::before {
+    content: "✔";
+    position: absolute;
+    left: 0;
+    color: #1a73e8;
+    font-size: 9pt;
+  }
+
+  /* ACHIEVEMENTS */
+  .achieve-list { list-style: none; padding: 0; }
+  .achieve-list li {
+    padding: 6px 10px;
+    margin-bottom: 5px;
+    background: #f0f7ff;
+    border-left: 3px solid #1a73e8;
+    border-radius: 0 6px 6px 0;
+    font-size: 10pt;
+    color: #333;
+  }
+  .achieve-list li strong { color: #1a1a2e; }
+
+  /* LANGUAGES */
+  .lang-row { display: flex; gap: 20px; }
+  .lang-item { font-size: 10pt; color: #333; }
+  .lang-item span { font-weight: 600; color: #1a1a2e; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <h1>APISORN LAPCHURAT</h1>
+  <div class="title">Maintenance &amp; Project Engineer | Section Manager</div>
+  <div class="contact">
+    <span>📞 083-102-8338</span>
+    <span>✉️ sawnsorn@gmail.com</span>
+    <span>📍 Bangkok, Thailand</span>
+  </div>
+</div>
+
+<!-- SUMMARY -->
+<div class="section summary">
+  <div class="section-title">Professional Summary</div>
+  <p>Results-driven Senior Maintenance &amp; Project Engineer with 8+ years of experience in automotive manufacturing environments. Proven track record in leading maintenance teams, implementing automation solutions (PLC/Robot), and driving operational excellence. Successfully reduced production line downtime by <strong>50%</strong> through PLC-based poka-yoke systems. Currently pursuing an MBA to strengthen strategic leadership and business acumen.</p>
+</div>
+
+<!-- EXPERIENCE -->
+<div class="section">
+  <div class="section-title">Work Experience</div>
+
+  <div class="job">
+    <div class="job-header">
+      <div>
+        <div class="job-title">Section Manager – Project Engineer</div>
+        <div class="job-company">TAAP (Toyota Auto Asia &amp; Pacific)</div>
+      </div>
+      <div class="job-date">2026 – Present</div>
+    </div>
+    <ul>
+      <li>Leading cross-functional project engineering initiatives to drive plant modernization and efficiency improvements</li>
+      <li>Managing project scope, timeline, and budget in alignment with corporate goals</li>
+      <li>Coordinating with internal stakeholders and external vendors for equipment installation and commissioning</li>
+    </ul>
+  </div>
+
+  <div class="job">
+    <div class="job-header">
+      <div>
+        <div class="job-title">Maintenance Section Manager – Body Shop</div>
+        <div class="job-company">TAAP (Toyota Auto Asia &amp; Pacific)</div>
+      </div>
+      <div class="job-date">2019 – 2025</div>
+    </div>
+    <ul>
+      <li>Led and managed a team of maintenance engineers and technicians in the Body Shop department</li>
+      <li>Developed and executed preventive maintenance (PM) plans to maximize equipment uptime</li>
+      <li>Reduced production line downtime by <strong>50%</strong> through PLC-based poka-yoke system design and implementation</li>
+      <li>Managed maintenance budget, spare parts inventory, and vendor relationships</li>
+      <li>Introduced KUKA robot maintenance protocols to improve robot availability and reduce unplanned stops</li>
+      <li>Reported KPIs and maintenance performance metrics to senior management regularly</li>
+    </ul>
+  </div>
+
+  <div class="job">
+    <div class="job-header">
+      <div>
+        <div class="job-title">Maintenance Engineer – Assembly Shop</div>
+        <div class="job-company">TAAP (Toyota Auto Asia &amp; Pacific)</div>
+      </div>
+      <div class="job-date">2018 – 2021</div>
+    </div>
+    <ul>
+      <li>Performed corrective and preventive maintenance on production line equipment and automation systems</li>
+      <li>Programmed and troubleshot Siemens PLC systems for production line control</li>
+      <li>Designed and developed poka-yoke programs integrated into production lines to prevent defects</li>
+      <li>Supported installation and commissioning of new automated equipment</li>
+    </ul>
+  </div>
+</div>
+
+<!-- EDUCATION -->
+<div class="section">
+  <div class="section-title">Education</div>
+
+  <div class="edu-item">
+    <div class="edu-degree">Master of Business Administration (MBA) <em style="font-weight:400;color:#e67e22;">— In Progress</em></div>
+    <div class="edu-school">Chulalongkorn University</div>
+  </div>
+
+  <div class="edu-item">
+    <div class="edu-degree">Bachelor of Engineering – Electro-Mechanical Manufacturing Engineering</div>
+    <div class="edu-school">Kasetsart University (Bangkhen Campus)</div>
+    <div class="edu-detail">2014 – 2018 &nbsp;|&nbsp; GPA: 2.84</div>
+  </div>
+</div>
+
+<!-- SKILLS -->
+<div class="section">
+  <div class="section-title">Technical Skills</div>
+  <table>
+    <tr><th>Category</th><th>Details</th></tr>
+    <tr><td><strong>Automation &amp; Control</strong></td><td>Siemens PLC Programming, KUKA Robot Operation &amp; Maintenance</td></tr>
+    <tr><td><strong>CAD / CAM / CAE</strong></td><td>SolidWorks</td></tr>
+    <tr><td><strong>AI &amp; Digital Tools</strong></td><td>AI Applications &amp; Tools, PLC Ladder Logic</td></tr>
+    <tr><td><strong>Management</strong></td><td>Team Leadership, Preventive Maintenance Planning, Budget Control</td></tr>
+    <tr><td><strong>Finance</strong></td><td>Maintenance Cost Analysis, ROI Evaluation</td></tr>
+    <tr><td><strong>Office &amp; Productivity</strong></td><td>Microsoft Office (Word, Excel, PowerPoint)</td></tr>
+  </table>
+</div>
+
+<!-- CERTS -->
+<div class="section">
+  <div class="section-title">Certifications</div>
+  <ul class="cert-list">
+    <li>Siemens PLC Programming Certificate</li>
+    <li>KUKA Robot Operation &amp; Maintenance Certificate</li>
+  </ul>
+</div>
+
+<!-- ACHIEVEMENTS -->
+<div class="section">
+  <div class="section-title">Key Achievements</div>
+  <ul class="achieve-list">
+    <li><strong>50% Downtime Reduction</strong> — Designed and implemented PLC-based poka-yoke systems in production lines at Body Shop, cutting unplanned downtime by half</li>
+    <li><strong>Automation Integration</strong> — Led adoption of KUKA robot maintenance protocols across Body Shop, improving robot uptime and reliability</li>
+    <li><strong>Team Leadership</strong> — Managed and developed a cross-functional maintenance team as Section Manager for 6+ years in a high-volume automotive plant</li>
+  </ul>
+</div>
+
+<!-- LANGUAGES -->
+<div class="section">
+  <div class="section-title">Languages</div>
+  <div class="lang-row">
+    <div class="lang-item"><span>Thai</span> — Native</div>
+    <div class="lang-item"><span>English</span> — Professional Working Proficiency</div>
+  </div>
+</div>
+
+</body>
+</html>
