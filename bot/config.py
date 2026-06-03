@@ -1,10 +1,10 @@
 # ─── Risk Management ─────────────────────────────────────────────────────────
-TAKE_PROFIT_PCT  = 0.040   # Sell when +4.0% profit  (was 2.5%)
-STOP_LOSS_PCT    = 0.025   # Sell when -2.5% loss    (was 3.0%)
-MAX_POS_PCT      = 0.30    # Max 30% of tradeable THB per coin (was 25%)
+TAKE_PROFIT_PCT  = 0.035   # Sell when +3.5% profit
+STOP_LOSS_PCT    = 0.020   # Sell when -2.0% loss (tighter cut)
+MAX_POS_PCT      = 0.20    # Max 20% of tradeable THB per coin
 MIN_ORDER_THB    = 200.0   # Minimum single order in THB
-RESERVE_PCT      = 0.05    # Keep 5% cash reserve    (was 10%)
-MAX_POSITIONS    = 5       # Hold at most 5 coins     (was 4)
+RESERVE_PCT      = 0.10    # Keep 10% cash reserve
+MAX_POSITIONS    = 3       # Hold at most 3 coins (reduce overexposure)
 
 # ─── EMA Settings ─────────────────────────────────────────────────────────────
 EMA_FAST         = 9       # Fast EMA — more reactive (was 12)
@@ -29,22 +29,10 @@ KLINE_LIMIT      = 72      # 72 candles
 
 # ─── Target Trading Pairs on BinanceTH (THB quote) ───────────────────────────
 TRADE_PAIRS = [
-    # Tier 1 — highest liquidity, most reliable signals
+    # Tier 1 only — highest liquidity, most reliable signals
     'BTC/THB',
     'ETH/THB',
     'XRP/THB',
     'SOL/THB',
     'BNB/THB',
-    # Tier 2 — high volatility, good for short-term gains
-    'DOGE/THB',
-    'ADA/THB',
-    'AVAX/THB',
-    'LINK/THB',
-    'DOT/THB',
-    # Tier 3 — smaller coins, higher risk/reward
-    'LTC/THB',
-    'TRX/THB',
-    'NEAR/THB',
-    'TON/THB',
-    'POL/THB',
 ]
