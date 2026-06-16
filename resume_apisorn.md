@@ -14,7 +14,7 @@ Results-driven Senior Maintenance & Project Engineer with 8+ years of experience
 ## WORK EXPERIENCE
 
 ### Section Manager – Project Engineer
-**TAAP (Toyota Auto Asia & Pacific)** &nbsp;|&nbsp; *2026 – Present*
+**TAAP (Thonburi Automotive Assembly Plant)** &nbsp;|&nbsp; *2026 – Present*
 - Leading cross-functional project engineering initiatives to drive plant modernization and efficiency improvements
 - Managing project scope, timeline, and budget in alignment with corporate goals
 - Coordinating with internal stakeholders and external vendors for equipment installation and commissioning
@@ -22,7 +22,7 @@ Results-driven Senior Maintenance & Project Engineer with 8+ years of experience
 ---
 
 ### Maintenance Section Manager – Body Shop
-**TAAP (Toyota Auto Asia & Pacific)** &nbsp;|&nbsp; *2019 – 2025*
+**TAAP (Thonburi Automotive Assembly Plant)** &nbsp;|&nbsp; *2019 – 2025*
 - Led and managed a team of maintenance engineers and technicians in the Body Shop department
 - Developed and executed preventive maintenance (PM) plans to maximize equipment uptime
 - Reduced production line downtime by **50%** through design and implementation of PLC-based poka-yoke systems
@@ -33,7 +33,7 @@ Results-driven Senior Maintenance & Project Engineer with 8+ years of experience
 ---
 
 ### Maintenance Engineer – Assembly Shop
-**TAAP (Toyota Auto Asia & Pacific)** &nbsp;|&nbsp; *2018 – 2021*
+**TAAP (Thonburi Automotive Assembly Plant)** &nbsp;|&nbsp; *2018 – 2021*
 - Performed corrective and preventive maintenance on production line equipment and automation systems
 - Programmed and troubleshot Siemens PLC systems for production line control
 - Designed and developed poka-yoke programs integrated into production lines to prevent defects
